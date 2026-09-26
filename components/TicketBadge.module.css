@@ -1,0 +1,83 @@
+.badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 56px;
+  height: 40px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  border: 2px solid transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.badge:hover:not(:disabled)::after {
+  opacity: 1;
+}
+
+.pending {
+  background: var(--warning-bg);
+  color: var(--warning-light);
+  border-color: var(--warning-border);
+}
+
+.pending:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: var(--warning);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+}
+
+.pickedUp {
+  background: var(--success-bg);
+  color: var(--success-light);
+  border-color: var(--success-border);
+  cursor: default;
+  opacity: 0.8;
+}
+
+.selected {
+  background: rgba(240, 165, 0, 0.25) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary-light) !important;
+  box-shadow: 0 0 12px var(--primary-glow);
+  transform: translateY(-2px);
+}
+
+.number {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+}
+
+.checkIcon {
+  font-size: 0.75rem;
+  color: var(--success);
+}
+
+.selectIcon {
+  font-size: 0.5rem;
+  color: var(--primary);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.badge:disabled {
+  cursor: default;
+}
+
+.badge:active:not(:disabled) {
+  transform: scale(0.95);
+}
