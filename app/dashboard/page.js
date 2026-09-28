@@ -51,11 +51,15 @@ export default function DashboardPage() {
     }
   }, [toast]);
 
-  // Initial load and auto-sync
+  // Initial load
   useEffect(() => {
     fetchStats();
     searchStudents('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Auto-sync polling
+  useEffect(() => {
     const interval = setInterval(() => {
       fetchStats();
       searchStudents(searchQuery);
