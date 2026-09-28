@@ -90,13 +90,13 @@ export default function ImportPage() {
         <h3><ClipboardList size={20} className="inline-icon" /> Formato del CSV</h3>
         <p>El archivo CSV debe tener las siguientes columnas:</p>
         <div className={styles.codeBlock}>
-          <code>nombre,codigo,dni,ticket_inicio,ticket_fin</code>
+          <code>nombre,ticket_inicio,ticket_fin</code>
         </div>
         <p className="text-muted">
-          Ejemplo: <code>Juan Pérez,2021-001,12345678,1,15</code>
+          Ejemplo: <code>Juan Pérez,1,15</code>
         </p>
         <p className="text-muted" style={{ marginTop: '8px' }}>
-          También se acepta: <code>nombre,codigo,dni,tickets</code> donde tickets es una lista separada por comas como <code>1;2;3;4;5</code>
+          También se acepta: <code>nombre,tickets</code> donde tickets es una lista separada por comas como <code>1;2;3;4;5</code>
         </p>
       </div>
 

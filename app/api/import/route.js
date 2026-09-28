@@ -59,8 +59,6 @@ export async function POST(request) {
       });
 
       const name = row.nombre || row.name || '';
-      const code = row.codigo || row.code || '';
-      const dni = row.dni || '';
 
       if (!name) {
         errors.push(`Fila ${i + 1}: nombre vacío`);
@@ -72,8 +70,6 @@ export async function POST(request) {
         .from('students')
         .insert({
           name,
-          code: code || null,
-          dni: dni || null,
         })
         .select()
         .single();
