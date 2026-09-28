@@ -10,7 +10,7 @@ export default function TicketGrid({ tickets, onPickUp, onUndoPickUp }) {
   const [selectedTickets, setSelectedTickets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('en_momento');
+  const [paymentMethod, setPaymentMethod] = useState('en_momento_efectivo');
 
   const pendingTickets = tickets.filter((t) => !t.is_picked_up);
   const pickedUpCount = tickets.filter((t) => t.is_picked_up).length;
@@ -99,10 +99,17 @@ export default function TicketGrid({ tickets, onPickUp, onUndoPickUp }) {
                 
                 <div className={styles.paymentOptions}>
                   <div 
-                    className={`${styles.paymentPill} ${paymentMethod === 'en_momento' ? styles.active : ''}`}
-                    onClick={() => setPaymentMethod('en_momento')}
+                    className={`${styles.paymentPill} ${paymentMethod === 'en_momento_efectivo' ? styles.active : ''}`}
+                    onClick={() => setPaymentMethod('en_momento_efectivo')}
                   >
-                    <span><Banknote size={14} className="inline-icon"/> Pagar en Caja</span>
+                    <span><Banknote size={14} className="inline-icon"/> Efectivo</span>
+                    <strong>S/ {selectedTickets.length * 15}</strong>
+                  </div>
+                  <div 
+                    className={`${styles.paymentPill} ${paymentMethod === 'en_momento_yape' ? styles.active : ''}`}
+                    onClick={() => setPaymentMethod('en_momento_yape')}
+                  >
+                    <span><Banknote size={14} className="inline-icon"/> Yape</span>
                     <strong>S/ {selectedTickets.length * 15}</strong>
                   </div>
                   <div 

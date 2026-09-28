@@ -140,10 +140,16 @@ export default function MovementsPage() {
             <tbody>
               {groupedMovements.map((group) => {
                 const [method, email] = (group.payment_method || '').split('|');
-                const actualMethod = method || 'en_momento';
+                const actualMethod = method || 'en_momento_efectivo';
                 const cashierEmail = email || 'Desconocido';
-                const totalMonto = actualMethod === 'en_momento' ? group.tickets.length * 15 : 0;
+                const isCaja = actualMethod.startsWith('en_momento');
+                const totalMonto = isCaja ? group.tickets.length * 15 : 0;
                 
+                let paymentLabel = 'Pre-venta';
+                if (actualMethod === 'en_momento_efectivo') paymentLabel = `Efectivo (S/${totalMonto})`;
+                else if (actualMethod === 'en_momento_yape') paymentLabel = `Yape (S/${totalMonto})`;
+                else if (actualMethod === 'en_momento') paymentLabel = `Caja (S/${totalMonto})`;
+
                 // Generar un Nro Movimiento corto basado en el timestamp (últimos 6 dígitos de ms)
                 const movNumber = new Date(group.picked_up_at).getTime().toString().slice(-6);
 
@@ -164,8 +170,8 @@ export default function MovementsPage() {
                   <td>{group.students?.name || 'Desconocido'}</td>
                   <td>{new Date(group.picked_up_at).toLocaleString('es-PE', { timeZone: 'America/Lima' })}</td>
                   <td>
-                    <span className={`badge ${actualMethod === 'en_momento' ? 'badge-success' : 'badge-primary'}`}>
-                      {actualMethod === 'en_momento' ? `Caja (S/${totalMonto})` : 'Pre-venta'}
+                    <span className={`badge ${isCaja ? 'badge-success' : 'badge-primary'}`}>
+                      {paymentLabel}
                     </span>
                   </td>
                   <td>

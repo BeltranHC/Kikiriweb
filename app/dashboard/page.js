@@ -51,11 +51,18 @@ export default function DashboardPage() {
     }
   }, [toast]);
 
-  // Initial load
+  // Initial load and auto-sync
   useEffect(() => {
     fetchStats();
     searchStudents('');
-  }, [fetchStats, searchStudents]);
+
+    const interval = setInterval(() => {
+      fetchStats();
+      searchStudents(searchQuery);
+    }, 30000); // Sincronización automática cada 30 segundos
+
+    return () => clearInterval(interval);
+  }, [fetchStats, searchStudents, searchQuery]);
 
   // Handle search
   const handleSearch = (query) => {

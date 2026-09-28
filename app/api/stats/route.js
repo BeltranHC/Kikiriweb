@@ -33,11 +33,19 @@ export async function GET() {
     const extraTickets = allTickets.filter((t) => t.is_extra).length;
     
     // Sumador total de polladas cobradas en el momento
-    const collectedNow = allTickets.filter((t) => {
+    const collectedNowCash = allTickets.filter((t) => {
       if (!t.is_picked_up) return false;
       const [method] = (t.payment_method || '').split('|');
-      return method === 'en_momento';
+      return method === 'en_momento' || method === 'en_momento_efectivo';
     }).length * 15;
+
+    const collectedNowYape = allTickets.filter((t) => {
+      if (!t.is_picked_up) return false;
+      const [method] = (t.payment_method || '').split('|');
+      return method === 'en_momento_yape';
+    }).length * 15;
+
+    const collectedNow = collectedNowCash + collectedNowYape;
 
     return NextResponse.json({
       totalTickets,
@@ -46,6 +54,8 @@ export async function GET() {
       totalStudents: totalStudents || 0,
       extraTickets,
       collectedNow,
+      collectedCash: collectedNowCash,
+      collectedYape: collectedNowYape,
     });
   } catch (err) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

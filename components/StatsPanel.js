@@ -12,6 +12,8 @@ export default function StatsPanel({ stats }) {
     totalStudents = 0,
     extraTickets = 0,
     collectedNow = 0,
+    collectedCash = 0,
+    collectedYape = 0,
   } = stats || {};
 
   const pct = percentage(pickedUp, totalTickets);
@@ -44,6 +46,7 @@ export default function StatsPanel({ stats }) {
     {
       label: 'Cobrado Hoy',
       value: `S/ ${collectedNow}`,
+      subLabel: `Efe: S/ ${collectedCash} | Yape: S/ ${collectedYape}`,
       icon: <Banknote size={24} />,
       color: 'success',
     },
@@ -58,6 +61,7 @@ export default function StatsPanel({ stats }) {
             <div className={styles.statContent}>
               <span className={styles.statValue}>{card.value}</span>
               <span className={styles.statLabel}>{card.label}</span>
+              {card.subLabel && <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginTop: '4px' }}>{card.subLabel}</span>}
             </div>
           </div>
         ))}
