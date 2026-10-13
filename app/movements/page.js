@@ -18,26 +18,45 @@ export default function MovementsPage() {
   const fetchMovements = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('tickets')
-        .select(`
-          id,
-          ticket_number,
-          payment_method,
-          picked_up_at,
-          picked_up_by,
-          is_extra,
-          students (
-            name,
-            code
-          )
-        `)
-        .eq('is_picked_up', true)
-        .order('picked_up_at', { ascending: false })
-        .limit(100);
+      const pageSize = 1000;
+      let from = 0;
+      let allData = [];
+      let hasMore = true;
 
-      if (error) throw error;
-      setMovements(data || []);
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('tickets')
+          .select(`
+            id,
+            ticket_number,
+            payment_method,
+            picked_up_at,
+            picked_up_by,
+            is_extra,
+            students (
+              name,
+              code
+            )
+          `)
+          .eq('is_picked_up', true)
+          .order('picked_up_at', { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          allData = allData.concat(data);
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            from += pageSize;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      setMovements(allData);
     } catch (err) {
       console.error('Error fetching movements:', err);
       toast.error('Error al cargar historial');
@@ -97,7 +116,12 @@ export default function MovementsPage() {
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>Historial de Movimientos</h1>
-          <p className={styles.subtitle}>Auditoría de los últimos 100 tickets entregados</p>
+          <p className={styles.subtitle}>
+            Auditoría de todos los tickets entregados
+            {!loading && (
+              <span> ({searchQuery ? `${filteredMovements.length} de ${movements.length} tickets filtrados` : `${movements.length} tickets en ${groupedMovements.length} movimientos`})</span>
+            )}
+          </p>
         </div>
         <button className="btn btn-secondary" onClick={fetchMovements}>
           <RefreshCw size={16} style={{marginRight: 6}} /> Actualizar
