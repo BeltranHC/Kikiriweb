@@ -1,63 +1,13 @@
-import { createClient } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
+import { requireSession, apiError } from '@/lib/api';
+import { localDate } from '@/lib/domain.mjs';
 
 export const dynamic = 'force-dynamic';
-
-// GET: Get overall stats
 export async function GET() {
-  const supabase = createClient();
-
   try {
-    // Get all tickets
-    const { data: tickets, error: ticketError } = await supabase
-      .from('tickets')
-      .select('id, is_picked_up, is_extra, payment_method');
-
-    if (ticketError) {
-      return NextResponse.json({ error: ticketError.message }, { status: 500 });
-    }
-
-    // Get student count
-    const { count: totalStudents, error: studentError } = await supabase
-      .from('students')
-      .select('id', { count: 'exact', head: true });
-
-    if (studentError) {
-      return NextResponse.json({ error: studentError.message }, { status: 500 });
-    }
-
-    const allTickets = tickets || [];
-    const totalTickets = allTickets.length;
-    const pickedUp = allTickets.filter((t) => t.is_picked_up).length;
-    const pending = totalTickets - pickedUp;
-    const extraTickets = allTickets.filter((t) => t.is_extra).length;
-    
-    // Sumador total de polladas cobradas en el momento
-    const collectedNowCash = allTickets.filter((t) => {
-      if (!t.is_picked_up) return false;
-      const [method] = (t.payment_method || '').split('|');
-      return method === 'en_momento' || method === 'en_momento_efectivo';
-    }).length * 15;
-
-    const collectedNowYape = allTickets.filter((t) => {
-      if (!t.is_picked_up) return false;
-      const [method] = (t.payment_method || '').split('|');
-      return method === 'en_momento_yape';
-    }).length * 15;
-
-    const collectedNow = collectedNowCash + collectedNowYape;
-
-    return NextResponse.json({
-      totalTickets,
-      pickedUp,
-      pending,
-      totalStudents: totalStudents || 0,
-      extraTickets,
-      collectedNow,
-      collectedCash: collectedNowCash,
-      collectedYape: collectedNowYape,
-    });
-  } catch (err) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
+    const { supabase } = await requireSession();
+    const { data, error } = await supabase.rpc('ticket_stats', { p_date: localDate() });
+    if (error) throw error;
+    return NextResponse.json(data);
+  } catch (error) { return apiError(error); }
 }

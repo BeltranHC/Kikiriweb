@@ -3,88 +3,29 @@
 import { percentage } from '@/lib/utils';
 import { Ticket, CheckCircle, Clock, GraduationCap, Banknote } from 'lucide-react';
 import styles from './StatsPanel.module.css';
+const number = new Intl.NumberFormat('es-PE');
+const money = value => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(value);
 
 export default function StatsPanel({ stats }) {
-  const {
-    totalTickets = 0,
-    pickedUp = 0,
-    pending = 0,
-    totalStudents = 0,
-    extraTickets = 0,
-    collectedNow = 0,
-    collectedCash = 0,
-    collectedYape = 0,
-  } = stats || {};
-
+  const { totalTickets = 0, pickedUp = 0, pending = 0, totalStudents = 0, extraTickets = 0, collectedNow = 0, collectedCash = 0, collectedYape = 0 } = stats || {};
   const pct = percentage(pickedUp, totalTickets);
-
   const cards = [
-    {
-      label: 'Total Tickets',
-      value: totalTickets,
-      icon: <Ticket size={24} />,
-      color: 'primary',
-    },
-    {
-      label: 'Recogidos',
-      value: pickedUp,
-      icon: <CheckCircle size={24} />,
-      color: 'success',
-    },
-    {
-      label: 'Pendientes',
-      value: pending,
-      icon: <Clock size={24} />,
-      color: 'warning',
-    },
-    {
-      label: 'Estudiantes',
-      value: totalStudents,
-      icon: <GraduationCap size={24} />,
-      color: 'info',
-    },
-    {
-      label: 'Cobrado Hoy',
-      value: `S/ ${collectedNow}`,
-      subLabel: `Efe: S/ ${collectedCash} | Yape: S/ ${collectedYape}`,
-      icon: <Banknote size={24} />,
-      color: 'success',
-    },
+    { label: 'Tickets totales', value: number.format(totalTickets), icon: Ticket, color: 'primary' },
+    { label: 'Entregados', value: number.format(pickedUp), icon: CheckCircle, color: 'success' },
+    { label: 'Pendientes', value: number.format(pending), icon: Clock, color: 'warning' },
+    { label: 'Estudiantes', value: number.format(totalStudents), icon: GraduationCap, color: 'info' },
+    { label: 'Cobrado hoy', value: money(collectedNow), icon: Banknote, color: 'cash' },
   ];
-
-  return (
-    <div className={styles.panel}>
-      <div className={styles.statsGrid}>
-        {cards.map((card) => (
-          <div key={card.label} className={`${styles.statCard} ${styles[card.color]}`}>
-            <div className={styles.statIcon}>{card.icon}</div>
-            <div className={styles.statContent}>
-              <span className={styles.statValue}>{card.value}</span>
-              <span className={styles.statLabel}>{card.label}</span>
-              {card.subLabel && <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginTop: '4px' }}>{card.subLabel}</span>}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Overall progress */}
-      <div className={styles.progressSection}>
-        <div className={styles.progressHeader}>
-          <span className={styles.progressTitle}>Avance General</span>
-          <span className={styles.progressPct}>{pct}%</span>
-        </div>
-        <div className={styles.progressBar}>
-          <div
-            className={styles.progressFill}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        {extraTickets > 0 && (
-          <span className={styles.extraNote}>
-            <Ticket size={16} className="inline-icon" /> {extraTickets} tickets extra disponibles
-          </span>
-        )}
-      </div>
+  return <section className={styles.panel} aria-label="Resumen de entregas">
+    <div className={styles.statsGrid}>{cards.map(({ label, value, icon: Icon, color }) => <article className={`${styles.statCard} ${styles[color]}`} key={label}>
+      <div className={styles.cardHeading}><span className={styles.statLabel}>{label}</span><span className={styles.statIcon}><Icon size={17} /></span></div>
+      <strong className={styles.statValue}>{value}</strong>
+      {color === 'cash' && <p className={styles.cashDetail}><span>Efectivo <b>{money(collectedCash)}</b></span><span>Yape <b>{money(collectedYape)}</b></span></p>}
+    </article>)}</div>
+    <div className={styles.progressSection}>
+      <div className={styles.progressHeader}><span className={styles.progressTitle}>Avance de entregas <span>{number.format(pickedUp)} de {number.format(totalTickets)} tickets</span></span><strong className={styles.progressPct}>{pct}%</strong></div>
+      <div className={styles.progressBar} role="progressbar" aria-label="Avance de entregas" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div className={styles.progressFill} style={{ width: `${pct}%` }} /></div>
+      {extraTickets > 0 && <span className={styles.extraNote}><Ticket size={13} /> {extraTickets} tickets extra disponibles</span>}
     </div>
-  );
+  </section>;
 }

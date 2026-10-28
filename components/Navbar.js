@@ -1,111 +1,46 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { createClient } from '@/lib/supabase-browser';
-import { LayoutDashboard, GraduationCap, Ticket, Upload, LogOut, Bird, Sun, Moon, History } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { clearSearchStates } from '@/lib/view-state.mjs';
+import { useToast } from './Toast';
+import { LayoutDashboard, GraduationCap, Ticket, Upload, LogOut, Bird, History } from 'lucide-react';
 import styles from './Navbar.module.css';
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
-  const [theme, setTheme] = useState('dark');
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    // Check if user has a preference saved
-    const savedTheme = localStorage.getItem('kikiriweb-theme');
-    if (savedTheme) {
-      setTheme(savedTheme);
-      document.documentElement.setAttribute('data-theme', savedTheme);
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('kikiriweb-theme', newTheme);
-  };
-
+  const [leaving, setLeaving] = useState(false);
+  const toast = useToast();
   const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-    { href: '/students', label: 'Estudiantes', icon: <GraduationCap size={20} /> },
-    { href: '/movements', label: 'Movimientos', icon: <History size={20} /> },
-    { href: '/extras', label: 'Extras', icon: <Ticket size={20} /> },
-    { href: '/import', label: 'Importar', icon: <Upload size={20} /> },
+    { href: '/dashboard', label: 'Panel', icon: LayoutDashboard },
+    { href: '/students', label: 'Estudiantes', icon: GraduationCap },
+    { href: '/movements', label: 'Movimientos', icon: History },
+    { href: '/extras', label: 'Extras', icon: Ticket },
+    { href: '/import', label: 'Importar', icon: Upload },
   ];
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
-    router.refresh();
+  const logout = async () => {
+    setLeaving(true);
+    try {
+      const { error } = await createClient().auth.signOut();
+      if (error) throw error;
+      try { clearSearchStates(window.sessionStorage); } catch { /* Storage may be blocked. */ }
+      router.replace('/'); router.refresh();
+    } catch { toast.error('No se pudo cerrar la sesión. Inténtalo de nuevo.'); setLeaving(false); }
   };
-
-  return (
-    <nav className={styles.navbar}>
-      <div className={styles.navContent}>
-        <div className={styles.brand} onClick={() => router.push('/dashboard')}>
-          <span className={styles.brandIcon}><Bird size={24} /></span>
-          <span className={styles.brandText}>KikiriWeb</span>
-        </div>
-
-        <div className={styles.navLinks}>
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className={`${styles.navLink} ${
-                pathname === item.href ? styles.navLinkActive : ''
-              }`}
-              onClick={(e) => {
-                e.preventDefault();
-                router.push(item.href);
-              }}
-            >
-              <span className={styles.navIcon}>{item.icon}</span>
-              <span className={styles.navLabel}>{item.label}</span>
-            </a>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            className={styles.logoutBtn}
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          >
-            <span>{mounted && theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</span>
-          </button>
-          
-          <button className={styles.logoutBtn} onClick={handleLogout} title="Cerrar sesión">
-            <span><LogOut size={20} /></span>
-            <span className={styles.logoutLabel}>Salir</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile bottom nav */}
-      <div className={styles.mobileNav}>
-        {navItems.map((item) => (
-          <a
-            key={item.href}
-            href={item.href}
-            className={`${styles.mobileLink} ${
-              pathname === item.href ? styles.mobileLinkActive : ''
-            }`}
-            onClick={(e) => {
-              e.preventDefault();
-              router.push(item.href);
-            }}
-          >
-            <span className={styles.mobileIcon}>{item.icon}</span>
-            <span className={styles.mobileLabel}>{item.label}</span>
-          </a>
-        ))}
-      </div>
-    </nav>
-  );
+  return <nav className={styles.navbar} aria-label="Navegación principal">
+    <div className={styles.navContent}>
+      <Link href="/dashboard" className={styles.brand} aria-label="KikiriWeb, panel de entregas">
+        <span className={styles.brandIcon}><Bird size={23} /></span>
+        <span className={styles.brandText}>KikiriWeb<span className={styles.brandSubtitle}>Control de entregas</span></span>
+      </Link>
+      <div className={styles.navLinks}>{navItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={pathname === href ? 'page' : undefined}
+        className={`${styles.navLink} ${pathname === href ? styles.navLinkActive : ''}`}><Icon size={17} /><span>{label}</span></Link>)}</div>
+      <button type="button" className={styles.logoutBtn} onClick={logout} disabled={leaving} aria-label="Cerrar sesión"><LogOut size={17} /><span className={styles.logoutLabel}>{leaving ? 'Saliendo...' : 'Salir'}</span></button>
+    </div>
+    <div className={styles.mobileNav}>{navItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={pathname === href ? 'page' : undefined}
+      className={`${styles.mobileLink} ${pathname === href ? styles.mobileLinkActive : ''}`}><Icon size={21} /><span className={styles.mobileLabel}>{label}</span></Link>)}</div>
+  </nav>;
 }

@@ -1,198 +1,71 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useToast } from '@/components/Toast';
-import { parseCSV } from '@/lib/utils';
-import { ClipboardList, FileText, Upload, Eye, Rocket, CheckCircle } from 'lucide-react';
+import { parseCSV, MAX_CSV_BYTES } from '@/lib/csv.mjs';
+import { importRows } from '@/lib/validation.mjs';
+import { requestJson } from '@/lib/client';
+import { Upload, CheckCircle } from 'lucide-react';
 import styles from './page.module.css';
 
 export default function ImportPage() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState([]);
-  const [importing, setImporting] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
+  const [rowCount, setRowCount] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const input = useRef(null);
+  const revision = useRef(0);
   const toast = useToast();
-
-  const handleFile = (selectedFile) => {
-    if (!selectedFile || !selectedFile.name.endsWith('.csv')) {
-      toast.error('Por favor selecciona un archivo CSV');
-      return;
-    }
-
-    setFile(selectedFile);
-    setResult(null);
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const data = parseCSV(e.target.result);
-      setPreview(data.slice(0, 10)); // Preview first 10 rows
-    };
-    reader.readAsText(selectedFile);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    const droppedFile = e.dataTransfer.files[0];
-    handleFile(droppedFile);
-  };
-
-  const handleImport = async () => {
-    if (!file) return;
-    setImporting(true);
-
+  const selectFile = async selected => {
+    if (busy) return;
+    const current = ++revision.current;
+    setFile(null); setPreview([]); setRowCount(0); setResult(null); setError(''); setReading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/import', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setResult(data);
-        if (data.studentsCreated === 0 && data.errors?.length > 0) {
-          toast.error(`Error en importación: ${data.errors[0]}`);
-        } else {
-          toast.success(`${data.studentsCreated} estudiantes y ${data.ticketsCreated} tickets importados`);
-          if (data.errors?.length > 0) {
-            toast.warning(`Hubo ${data.errors.length} errores menores. Revisa la consola.`);
-            console.warn("Import errors:", data.errors);
-          }
-        }
-        setFile(null);
-        setPreview([]);
-      } else {
-        toast.error(data.error || 'Error al importar');
-      }
-    } catch (err) {
-      toast.error('Error de conexión');
-    } finally {
-      setImporting(false);
-    }
+      if (!selected || !/\.csv$/i.test(selected.name)) throw new Error('Selecciona un archivo CSV');
+      if (selected.size > MAX_CSV_BYTES) throw new Error('El archivo supera 2 MB');
+      const rows = parseCSV(await selected.text());
+      importRows(rows);
+      if (current !== revision.current) return;
+      setFile(selected); setPreview(rows.slice(0, 10)); setRowCount(rows.length);
+    } catch (issue) { if (current === revision.current) setError(issue.message); }
+    finally { if (current === revision.current) setReading(false); }
   };
-
-  return (
-    <div className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Importar Datos</h1>
-          <p className={styles.subtitle}>Carga estudiantes y tickets desde un archivo CSV</p>
-        </div>
-      </div>
-
-      {/* Format Instructions */}
-      <div className={styles.instructions}>
-        <h3><ClipboardList size={20} className="inline-icon" /> Formato del CSV</h3>
-        <p>El archivo CSV debe tener las siguientes columnas:</p>
-        <div className={styles.codeBlock}>
-          <code>nombre,ticket_inicio,ticket_fin</code>
-        </div>
-        <p className="text-muted">
-          Ejemplo: <code>Juan Pérez,1,15</code>
-        </p>
-        <p className="text-muted" style={{ marginTop: '8px' }}>
-          También se acepta: <code>nombre,tickets</code> donde tickets es una lista separada por comas como <code>1;2;3;4;5</code>
-        </p>
-      </div>
-
-      {/* Drop Zone */}
-      <div
-        className={`${styles.dropZone} ${dragOver ? styles.dragOver : ''} ${file ? styles.hasFile : ''}`}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        onClick={() => document.getElementById('file-input').click()}
-      >
-        <input
-          id="file-input"
-          type="file"
-          accept=".csv"
-          className={styles.fileInput}
-          onChange={(e) => handleFile(e.target.files[0])}
-        />
-        {file ? (
-          <>
-            <span className={styles.dropIcon}><FileText size={48} /></span>
-            <span className={styles.fileName}>{file.name}</span>
-            <span className={styles.fileSize}>
-              {(file.size / 1024).toFixed(1)} KB
-            </span>
-          </>
-        ) : (
-          <>
-            <span className={styles.dropIcon}><Upload size={48} /></span>
-            <span className={styles.dropText}>
-              Arrastra tu archivo CSV aquí o haz clic para seleccionar
-            </span>
-          </>
-        )}
-      </div>
-
-      {/* Preview */}
-      {preview.length > 0 && (
-        <div className={styles.previewSection}>
-          <h3><Eye size={20} className="inline-icon" /> Vista previa ({preview.length} filas)</h3>
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  {Object.keys(preview[0]).map((key) => (
-                    <th key={key}>{key}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {preview.map((row, i) => (
-                  <tr key={i}>
-                    {Object.values(row).map((val, j) => (
-                      <td key={j}>{val}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <button
-            className="btn btn-primary btn-lg w-full"
-            onClick={handleImport}
-            disabled={importing}
-          >
-            {importing ? (
-              <>
-                <span className="spinner spinner-sm" />
-                Importando...
-              </>
-            ) : (
-              <>
-                <Rocket size={16} className="inline-icon" /> Importar {preview.length}+ Estudiantes
-              </>
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* Import Result */}
-      {result && (
-        <div className={styles.resultCard}>
-          <h3><CheckCircle size={20} className="inline-icon" /> Importación Exitosa</h3>
-          <div className={styles.resultStats}>
-            <div className={styles.resultStat}>
-              <span className={styles.resultValue}>{result.studentsCreated}</span>
-              <span className={styles.resultLabel}>Estudiantes</span>
-            </div>
-            <div className={styles.resultStat}>
-              <span className={styles.resultValue}>{result.ticketsCreated}</span>
-              <span className={styles.resultLabel}>Tickets</span>
-            </div>
-          </div>
-        </div>
-      )}
+  const upload = async () => {
+    if (!file || busy) return;
+    setBusy(true); setError('');
+    try {
+      const body = new FormData(); body.append('file', file);
+      const data = await requestJson('/api/import', { method: 'POST', body });
+      setResult(data); setFile(null); setPreview([]); setRowCount(0); input.current.value = '';
+      toast.success(`${data.studentsCreated} estudiantes y ${data.ticketsCreated} tickets importados`);
+    } catch (issue) { setError(issue.message); }
+    finally { setBusy(false); }
+  };
+  return <div className={styles.page}>
+    <div className={styles.header}><h1 className={styles.title}>Importar datos</h1><p className={styles.subtitle}>Carga estudiantes y tickets desde CSV</p></div>
+    <div className={styles.instructions}>
+      <h2>Formato del CSV</h2><p><code>nombre,ticket_inicio,ticket_fin</code></p><p>Ejemplo: <code>Juan Pérez,1,15</code></p>
+      <p>También puedes usar <code>nombre,tickets</code> con una lista como <code>1;2;3</code>. Se aceptan archivos separados por comas o punto y coma, y las columnas opcionales código y DNI.</p>
+      <p>Máximo 2 MB, 1000 estudiantes y 10 000 tickets. Si una fila falla, se cancela toda la importación.</p>
     </div>
-  );
+    <input ref={input} type="file" accept=".csv" hidden disabled={busy} onChange={event => { const selected = event.target.files[0]; event.target.value = ''; if (selected) selectFile(selected); }} />
+    <button type="button" className={`${styles.dropZone} ${file ? styles.hasFile : ''}`} disabled={busy}
+      onClick={() => input.current.click()} onDragOver={event => event.preventDefault()}
+      onDrop={event => { event.preventDefault(); if (!busy) selectFile(event.dataTransfer.files[0]); }}>
+      <Upload size={40} /><span>{reading ? 'Validando archivo...' : file ? `${file.name} · ${rowCount} estudiantes` : 'Arrastra un CSV o haz clic para seleccionarlo'}</span>
+    </button>
+    {error && <p role="alert" className="text-danger">{error}</p>}
+    {preview.length > 0 && <div className={styles.previewSection}>
+      <h2>Vista previa: {preview.length} de {rowCount} filas</h2>
+      <div className={styles.tableWrapper}><table className={styles.table}>
+        <thead><tr>{Object.keys(preview[0]).map(key => <th key={key}>{key}</th>)}</tr></thead>
+        <tbody>{preview.map((row, index) => <tr key={index}>{Object.entries(row).map(([key, value]) => <td key={key}>{value}</td>)}</tr>)}</tbody>
+      </table></div>
+      <button type="button" className="btn btn-primary" disabled={busy || reading} onClick={upload}>{busy ? 'Importando...' : `Importar ${rowCount} estudiantes`}</button>
+    </div>}
+    {result && <div className={styles.resultCard}><CheckCircle size={24} /><h2>Importación completada</h2><p>{result.studentsCreated} estudiantes y {result.ticketsCreated} tickets creados</p></div>}
+  </div>;
 }

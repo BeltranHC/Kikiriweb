@@ -1,151 +1,64 @@
-import { createClient } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
+import { requireSession, apiError, HttpError } from '@/lib/api';
+import { studentInput, validateUuid, ValidationError } from '@/lib/validation.mjs';
 
 export const dynamic = 'force-dynamic';
+const fields = 'id,name,code,dni,created_at,tickets(id,ticket_number,is_picked_up,picked_up_at,picked_up_by,movement_id,is_extra,is_paid,payment_method,unit_price)';
 
-// GET: Search students with their tickets
 export async function GET(request) {
-  const supabase = createClient();
-  const { searchParams } = new URL(request.url);
-  const query = searchParams.get('q') || '';
-
-  const selectFields = `
-    id, name, code, dni, created_at,
-    tickets (
-      id, ticket_number, is_picked_up, picked_up_at, picked_up_by, is_extra, created_at, is_paid, payment_method
-    )
-  `;
-
   try {
-    if (!query) {
-      const { data, error } = await supabase
-        .from('students')
-        .select(selectFields)
-        .order('name')
-        .limit(30);
-      
+    const { supabase } = await requireSession();
+    const params = new URL(request.url).searchParams;
+    const query = (params.get('q') || '').trim();
+    const page = Number(params.get('page') || 1);
+    const pageSize = Number(params.get('pageSize') || 30);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100 || query.length > 200) throw new ValidationError('Parámetros de búsqueda inválidos');
+    let ticketOwner = null;
+    if (/^\d+$/.test(query) && Number(query) <= 2147483647) {
+      const { data: ticket, error } = await supabase.from('tickets').select('student_id').eq('ticket_number', Number(query)).eq('is_extra', false).maybeSingle();
       if (error) throw error;
-      return NextResponse.json(data || []);
-    }
-
-    // 1. Search by text fields (name, code, dni)
-    const { data: textData, error: textError } = await supabase
-      .from('students')
-      .select(selectFields)
-      .or(`name.ilike.%${query}%,code.ilike.%${query}%,dni.ilike.%${query}%`)
-      .order('name')
-      .limit(50);
-
-    if (textError) throw textError;
-
-    let combinedData = [...(textData || [])];
-
-    // 2. If query is a number, search for the exact ticket number
-    if (/^\d+$/.test(query)) {
-      const ticketNum = parseInt(query, 10);
-      const { data: ticketInfo } = await supabase
-        .from('tickets')
-        .select('student_id')
-        .eq('ticket_number', ticketNum)
-        .eq('is_extra', false)
-        .single();
-      
-      if (ticketInfo?.student_id) {
-        // If we haven't already found this student via text search
-        if (!combinedData.some(s => s.id === ticketInfo.student_id)) {
-          const { data: studentMatch } = await supabase
-            .from('students')
-            .select(selectFields)
-            .eq('id', ticketInfo.student_id)
-            .single();
-            
-          if (studentMatch) {
-            combinedData.unshift(studentMatch); // Put ticket match at the top
-          }
-        }
+      if (ticket?.student_id) {
+        const { data, error: ownerError } = await supabase.from('students').select(fields).eq('id', ticket.student_id).maybeSingle();
+        if (ownerError) throw ownerError;
+        ticketOwner = data;
       }
     }
-
-    return NextResponse.json(combinedData);
-  } catch (err) {
-    console.error('Supabase error:', err);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
+    // Pin the exact ticket owner once, without duplicating them on later pages.
+    const pinned = ticketOwner ? 1 : 0;
+    const offset = Math.max(0, (page - 1) * pageSize - pinned);
+    const size = pageSize - (page === 1 ? pinned : 0);
+    let search = supabase.from('students').select(fields, { count: 'exact', head: size === 0 }).order('name').order('id');
+    if (query) {
+      const literal = query.replace(/\\/g, '\\\\').replace(/[%_]/g, '\\$&').replace(/"/g, '\\"');
+      search = search.or(['name', 'code', 'dni'].map(field => `${field}.ilike."%${literal}%"`).join(','));
+    }
+    if (ticketOwner) search = search.neq('id', ticketOwner.id);
+    if (size) search = search.range(offset, offset + size - 1);
+    const { data, count, error } = await search;
+    if (error) throw error;
+    const students = page === 1 && ticketOwner ? [ticketOwner, ...(data || [])] : (data || []);
+    const total = (count || 0) + pinned;
+    return NextResponse.json({ students, total, page, pageSize, hasMore: page * pageSize < total });
+  } catch (error) { return apiError(error); }
 }
 
-// POST: Create a new student with tickets
 export async function POST(request) {
-  const supabase = createClient();
-
   try {
-    const body = await request.json();
-    const { name, code, dni, ticketStart, ticketEnd } = body;
-
-    if (!name) {
-      return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 });
-    }
-
-    // Create student
-    const { data: student, error: studentError } = await supabase
-      .from('students')
-      .insert({ name, code: code || null, dni: dni || null })
-      .select()
-      .single();
-
-    if (studentError) {
-      return NextResponse.json({ error: studentError.message }, { status: 500 });
-    }
-
-    // Create tickets if range provided
-    if (ticketStart && ticketEnd && ticketStart <= ticketEnd) {
-      const tickets = [];
-      for (let i = ticketStart; i <= ticketEnd; i++) {
-        tickets.push({
-          ticket_number: i,
-          student_id: student.id,
-          is_picked_up: false,
-          is_extra: false,
-        });
-      }
-
-      const { error: ticketError } = await supabase
-        .from('tickets')
-        .insert(tickets);
-
-      if (ticketError) {
-        console.error('Ticket insert error:', ticketError);
-      }
-    }
-
-    return NextResponse.json(student, { status: 201 });
-  } catch (err) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
+    const { supabase } = await requireSession();
+    const student = studentInput(await request.json());
+    const { data, error } = await supabase.rpc('create_student_with_tickets', { p_name: student.name, p_code: student.code, p_dni: student.dni, p_ticket_numbers: student.tickets });
+    if (error) throw error;
+    return NextResponse.json(data, { status: 201 });
+  } catch (error) { return apiError(error); }
 }
 
-// DELETE: Delete a student and their tickets
 export async function DELETE(request) {
-  const supabase = createClient();
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-
-  if (!id) {
-    return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
-  }
-
   try {
-    // Delete tickets first
-    await supabase.from('tickets').delete().eq('student_id', id);
-
-    // Delete student
-    const { error } = await supabase.from('students').delete().eq('id', id);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    const { supabase } = await requireSession();
+    const id = validateUuid(new URL(request.url).searchParams.get('id'));
+    const { data, error } = await supabase.rpc('delete_student', { p_student_id: id });
+    if (error) throw error;
+    if (!data) throw new HttpError('Estudiante no encontrado', 404);
     return NextResponse.json({ success: true });
-  } catch (err) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
+  } catch (error) { return apiError(error); }
 }

@@ -2,7 +2,7 @@
   position: relative;
   width: 100%;
   min-width: 250px;
-  font-family: var(--font-base);
+  font-family: var(--font-body);
   user-select: none;
 }
 

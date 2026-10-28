@@ -3,22 +3,40 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/clean-next.mjs",
+    "prebuild": "node scripts/clean-next.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "seed": "node scripts/seed.mjs"
+    "lint": "eslint app components hooks lib middleware.js scripts tests --ext .js,.mjs --no-cache",
+    "seed": "node scripts/seed.mjs",
+    "test": "node --test",
+    "create-user": "node scripts/create-user.mjs",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.0",
     "lucide-react": "^1.47.0",
-    "next": "14.2.35",
-    "react": "^18",
-    "react-dom": "^18"
+    "next": "15.5.28",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.12",
+    "@playwright/test": "^1.64.1",
     "eslint": "^8",
-    "eslint-config-next": "14.2.35"
+    "eslint-config-next": "15.5.28"
+  },
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "^8.5.23"
+    },
+    "@next/eslint-plugin-next": {
+      "glob": "^10.5.0"
+    }
   }
 }

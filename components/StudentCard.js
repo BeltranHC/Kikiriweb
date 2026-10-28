@@ -15,11 +15,12 @@ export default function StudentCard({ student, onPickUp, onUndoPickUp }) {
   const pct = percentage(pickedUp, total);
 
   return (
-    <div className={`${styles.card} animate-fade-in`}>
+    <div className={`${styles.card} ${expanded ? styles.expandedCard : ''}`}>
       {/* Card Header */}
       <div
         className={styles.cardHeader}
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setExpanded(value => !value); } }}
         role="button"
         tabIndex={0}
         aria-expanded={expanded}
@@ -29,7 +30,7 @@ export default function StudentCard({ student, onPickUp, onUndoPickUp }) {
             {student.name?.charAt(0)?.toUpperCase() || '?'}
           </div>
           <div className={styles.details}>
-            <h3 className={styles.name}>{student.name}</h3>
+            <h3 className={styles.name} title={student.name}>{student.name}</h3>
             <div className={styles.meta}>
               {student.code && (
                 <span className={styles.metaItem}>
@@ -75,7 +76,7 @@ export default function StudentCard({ student, onPickUp, onUndoPickUp }) {
             <TicketGrid
               tickets={tickets}
               onPickUp={(ticketIds, paymentMethod) => onPickUp(student.id, ticketIds, paymentMethod)}
-              onUndoPickUp={(ticketId, ticketNumber) => onUndoPickUp && onUndoPickUp(student.id, ticketId, ticketNumber)}
+              onUndoPickUp={(ticketId, ticketNumber, movementId) => onUndoPickUp?.(student.id, ticketId, ticketNumber, movementId)}
             />
           ) : (
             <div className="empty-state">

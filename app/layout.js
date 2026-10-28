@@ -1,6 +1,7 @@
 import './globals.css';
 
 import { ToastProvider } from '@/components/Toast';
+import SessionRecovery from '@/components/SessionRecovery';
 
 export const metadata = {
   title: 'KikiriWeb - Sistema de Gestión de Tickets',
@@ -10,10 +11,11 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es">
+    <html lang="es" data-theme="light">
       <body>
         <ToastProvider>
           {children}
+          <SessionRecovery />
         </ToastProvider>
       </body>
     </html>

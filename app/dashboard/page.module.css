@@ -1,65 +1,25 @@
-.dashboard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xl);
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-}
-
-.title {
-  font-family: var(--font-heading);
-  font-size: 2rem;
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.subtitle {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  margin-top: 2px;
-}
-
-.searchSection {
-  position: sticky;
-  top: calc(var(--navbar-height) + var(--space-md));
-  z-index: 100;
-}
-
-.results {
-  min-height: 200px;
-}
-
-.studentList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.loadingState {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-md);
-  padding: var(--space-3xl);
-  color: var(--text-secondary);
-}
-
-@media (max-width: 768px) {
-  .title {
-    font-size: 1.5rem;
-  }
-
-  .dashboard {
-    padding-bottom: 80px; /* Space for mobile bottom nav */
-  }
+.dashboard { display: flex; flex-direction: column; gap: 28px; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.eyebrow { color: var(--primary); font-size: 0.63rem; letter-spacing: 0.14em; font-weight: 750; margin-bottom: 8px; }
+.title { font-size: 1.95rem; font-weight: 740; letter-spacing: -0.055em; }
+.subtitle { color: var(--text-secondary); font-size: 0.86rem; margin-top: 6px; }
+.headerActions { display: flex; align-items: center; gap: 10px; }
+.searchSection { position: sticky; top: calc(var(--navbar-height) + 12px); padding: 22px 24px; border: 1px solid var(--glass-border); background: #fff; border-radius: 16px; box-shadow: var(--shadow-sm); z-index: 20; }
+.searchHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 17px; }
+.searchHeader h2 { font-size: 0.98rem; font-weight: 680; letter-spacing: -0.025em; }
+.searchHeader p { font-size: 0.76rem; color: var(--text-secondary); margin-top: 3px; }
+.syncStatus { display: inline-flex; align-items: center; gap: 6px; font-size: 0.67rem; font-weight: 520; color: var(--text-secondary); white-space: nowrap; }
+.syncStatus svg { color: var(--success); }
+.syncError, .syncError svg { color: var(--warning); }
+.results { min-height: 180px; }
+.resultsHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; font-size: 0.75rem; color: var(--text-secondary); }
+.resultsHeader span:first-child { font-weight: 650; color: var(--text-primary); }
+.studentList { display: flex; flex-direction: column; gap: 11px; }
+.loadingStatus { color: var(--text-secondary); font-size: 0.78rem; margin: 0 0 12px; }
+@media (max-width: 640px) {
+  .dashboard { gap: 23px; } .header { gap: 18px; } .title { font-size: 1.65rem; }
+  .headerActions { width: 100%; } .headerActions button { flex: 1; }
+  .searchSection { padding: 18px 16px; top: calc(var(--navbar-height) + 7px); }
+  .searchHeader { align-items: flex-start; flex-direction: column; gap: 9px; margin-bottom: 13px; }
+  .searchHeader p { font-size: 0.72rem; } .syncStatus { font-size: 0.64rem; }
 }

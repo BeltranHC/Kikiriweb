@@ -70,7 +70,7 @@
 
 .table td {
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--glass-border);
   vertical-align: middle;
 }
 
@@ -115,7 +115,7 @@
 
 @media (max-width: 768px) {
   .page {
-    padding-bottom: 80px;
+    padding-bottom: 0;
   }
 
   .title {

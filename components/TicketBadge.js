@@ -1,34 +1,16 @@
 'use client';
 
+import { Check, Circle } from 'lucide-react';
 import { formatTicketNumber } from '@/lib/utils';
 import styles from './TicketBadge.module.css';
 
-export default function TicketBadge({ ticket, selected, onToggle, onUndo }) {
-  const isPickedUp = ticket.is_picked_up;
-  const formattedNumber = formatTicketNumber(ticket.ticket_number);
-
-  return (
-    <button
-      className={`${styles.badge} ${isPickedUp ? styles.pickedUp : styles.pending} ${
-        selected ? styles.selected : ''
-      }`}
-      onClick={() => {
-        if (isPickedUp) {
-          onUndo && onUndo(ticket.id, formattedNumber);
-        } else {
-          onToggle && onToggle(ticket);
-        }
-      }}
-      title={
-        isPickedUp
-          ? `Ticket #${formattedNumber} - Recogido (Click para deshacer)`
-          : `Ticket #${formattedNumber} - Pendiente (Click para seleccionar)`
-      }
-    >
-      <span className={styles.number}>{formattedNumber}</span>
-      {isPickedUp && <span className={styles.checkIcon}>✓</span>}
-      {selected && !isPickedUp && <span className={styles.selectIcon}>●</span>}
-    </button>
-  );
+export default function TicketBadge({ ticket, selected, onToggle, onUndo, disabled = false }) {
+  const number = formatTicketNumber(ticket.ticket_number);
+  return <button type="button" disabled={disabled} aria-pressed={ticket.is_picked_up ? undefined : !!selected}
+    className={`${styles.badge} ${ticket.is_picked_up ? styles.pickedUp : styles.pending} ${selected && !ticket.is_picked_up ? styles.selected : ''}`}
+    onClick={() => ticket.is_picked_up ? onUndo?.(ticket.id, number, ticket.movement_id) : onToggle?.(ticket)}
+    title={`Ticket #${number} - ${ticket.is_picked_up ? 'Recogido (anular entrega)' : 'Pendiente (seleccionar)'}`}>
+    <span className={styles.number}>{number}</span>
+    {ticket.is_picked_up ? <Check size={14} aria-hidden="true" /> : selected && <Circle size={10} aria-hidden="true" />}
+  </button>;
 }
-

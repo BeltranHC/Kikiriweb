@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
-import styles from './TicketGrid.module.css';
+import styles from './CustomSelect.module.css';
 
 export default function CustomSelect({ value, onChange, options }) {
   const [isOpen, setIsOpen] = useState(false);

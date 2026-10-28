@@ -1,112 +1,47 @@
-import { createClient } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
+import { requireSession, apiError } from '@/lib/api';
+import { fetchAll } from '@/lib/pagination.mjs';
+import { pickupInput, ticketNumber, validateUuid, ValidationError } from '@/lib/validation.mjs';
 
 export const dynamic = 'force-dynamic';
 
-// GET: Get tickets (optionally filtered by type=extra)
 export async function GET(request) {
-  const supabase = createClient();
-  const { searchParams } = new URL(request.url);
-  const type = searchParams.get('type');
-
   try {
-    let query = supabase
-      .from('tickets')
-      .select('*')
-      .order('ticket_number');
-
-    if (type === 'extra') {
-      query = query.eq('is_extra', true);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json(data || []);
-  } catch (err) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
+    const { supabase } = await requireSession();
+    const extra = new URL(request.url).searchParams.get('type') === 'extra';
+    const tickets = await fetchAll(() => {
+      const query = supabase.from('tickets').select('*').order('ticket_number').order('id');
+      return extra ? query.eq('is_extra', true) : query;
+    });
+    return NextResponse.json(tickets);
+  } catch (error) { return apiError(error); }
 }
 
-// POST: Create a new ticket
 export async function POST(request) {
-  const supabase = createClient();
-
   try {
+    const { supabase } = await requireSession();
     const body = await request.json();
-    const { ticketNumber, studentId, isExtra } = body;
-
-    if (!ticketNumber) {
-      return NextResponse.json({ error: 'Número de ticket requerido' }, { status: 400 });
-    }
-
-    const { data, error } = await supabase
-      .from('tickets')
-      .insert({
-        ticket_number: ticketNumber,
-        student_id: studentId || null,
-        is_extra: isExtra || false,
-        is_picked_up: false,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ValidationError('Datos de ticket inválidos');
+    const number = ticketNumber(body.ticketNumber);
+    if (typeof body.isExtra !== 'boolean') throw new ValidationError('Tipo de ticket inválido');
+    if (body.isExtra && body.studentId) throw new ValidationError('Un ticket extra no se asigna a un estudiante');
+    const studentId = body.studentId ? validateUuid(body.studentId) : null;
+    if (!body.isExtra && !studentId) throw new ValidationError('Selecciona un estudiante');
+    const { data, error } = await supabase.rpc('create_ticket', { p_ticket_number: number, p_student_id: studentId, p_is_extra: body.isExtra });
+    if (error) throw error;
     return NextResponse.json(data, { status: 201 });
-  } catch (err) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
+  } catch (error) { return apiError(error); }
 }
 
-// PATCH: Update ticket(s) pickup status
 export async function PATCH(request) {
-  const supabase = createClient();
-
   try {
-    const body = await request.json();
-    const { ticketIds, isPickedUp, paymentMethod } = body;
-
-    if (!ticketIds || !Array.isArray(ticketIds) || ticketIds.length === 0) {
-      return NextResponse.json({ error: 'ticketIds requeridos' }, { status: 400 });
-    }
-
-    const updateData = {
-      is_picked_up: isPickedUp,
-    };
-
-    if (isPickedUp) {
-      const { data: { user } } = await supabase.auth.getUser();
-      updateData.picked_up_at = new Date().toISOString();
-      updateData.is_paid = true;
-      const actualMethod = paymentMethod || 'en_momento';
-      const userEmail = user?.email || 'Desconocido';
-      updateData.payment_method = `${actualMethod}|${userEmail}`;
-      updateData.picked_up_by = user?.id || null;
-    } else {
-      updateData.picked_up_at = null;
-      updateData.picked_up_by = null;
-      updateData.is_paid = false;
-      updateData.payment_method = null;
-    }
-
-    const { data, error } = await supabase
-      .from('tickets')
-      .update(updateData)
-      .in('id', ticketIds)
-      .select();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    const { supabase } = await requireSession();
+    const input = pickupInput(await request.json());
+    const { data, error } = await supabase.rpc('update_ticket_pickup', {
+      p_ticket_ids: input.ticketIds, p_is_picked_up: input.isPickedUp,
+      p_payment_method: input.paymentMethod, p_expected_movement_id: input.expectedMovementId,
+    });
+    if (error) throw error;
     return NextResponse.json(data);
-  } catch (err) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
+  } catch (error) { return apiError(error); }
 }
