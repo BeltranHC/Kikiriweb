@@ -80,7 +80,62 @@ test('Ticket search pagination pins its owner once and keeps counts and subseque
   assert.deepEqual(single.students.map(student => student.id), [owner.id]);
 });
 
+test('GET /api/students?status=pending queries pending tickets and filters by student IDs', async () => {
+  const pendingId = '33333333-3333-4333-8333-333333333333';
+  const pendingStudent = { id: pendingId, name: 'Estudiante Pendiente' };
+  const client = { ...authenticated(), from(table) {
+    const query = {
+      select() { return this; },
+      order() { return this; },
+      eq(field, val) { this[field] = val; return this; },
+      not() { return this; },
+      in(field, values) { this.inField = field; this.inValues = values; return this; },
+      range() { return this; },
+      neq() { return this; },
+      maybeSingle() { return this; },
+      then(resolve, reject) {
+        if (table === 'tickets') return Promise.resolve({ data: [{ student_id: pendingId }], error: null }).then(resolve, reject);
+        return Promise.resolve({ data: [pendingStudent], count: 1, error: null }).then(resolve, reject);
+      },
+    };
+    return query;
+  } };
+  const route = await handlers('students', client);
+  const response = await (await route.GET({ url: 'http://localhost/api/students?status=pending' })).json();
+  assert.equal(response.total, 1);
+  assert.deepEqual(response.students, [pendingStudent]);
+});
+
 test('Ticket creation rejects JSON null with a validation response', async () => {
   const route = await handlers('tickets', authenticated(() => assert.fail('No writes expected')));
   assert.equal((await route.POST({ json: async () => null })).status, 400);
+});
+
+test('GET /api/tickets?number= looks up a single ticket and its student', async () => {
+  const targetTicket = { id: user.id, ticket_number: 42, student_id: '22222222-2222-4222-8222-222222222222', is_picked_up: false };
+  const targetStudent = { id: targetTicket.student_id, name: 'Estudiante Test', tickets: [targetTicket] };
+  const client = {
+    ...authenticated(),
+    from(table) {
+      return {
+        select() { return this; },
+        eq(field, val) {
+          this.field = field;
+          this.val = val;
+          return this;
+        },
+        maybeSingle: async () => {
+          if (table === 'tickets') return { data: targetTicket, error: null };
+          if (table === 'students') return { data: targetStudent, error: null };
+          return { data: null, error: null };
+        },
+      };
+    },
+  };
+  const route = await handlers('tickets', client);
+  const res = await route.GET({ url: 'http://localhost/api/tickets?number=42' });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.ticket_number, 42);
+  assert.equal(data.student.name, 'Estudiante Test');
 });

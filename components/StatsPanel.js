@@ -1,7 +1,7 @@
 'use client';
 
 import { percentage } from '@/lib/utils';
-import { Ticket, CheckCircle, Clock, GraduationCap, Banknote } from 'lucide-react';
+import { Ticket, CheckCircle, Clock, GraduationCap, Banknote, Smartphone } from 'lucide-react';
 import styles from './StatsPanel.module.css';
 const number = new Intl.NumberFormat('es-PE');
 const money = value => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(value);
@@ -20,7 +20,20 @@ export default function StatsPanel({ stats }) {
     <div className={styles.statsGrid}>{cards.map(({ label, value, icon: Icon, color }) => <article className={`${styles.statCard} ${styles[color]}`} key={label}>
       <div className={styles.cardHeading}><span className={styles.statLabel}>{label}</span><span className={styles.statIcon}><Icon size={17} /></span></div>
       <strong className={styles.statValue}>{value}</strong>
-      {color === 'cash' && <p className={styles.cashDetail}><span>Efectivo <b>{money(collectedCash)}</b></span><span>Yape <b>{money(collectedYape)}</b></span></p>}
+      {color === 'cash' && (
+        <div className={styles.cashDetail}>
+          <span className={styles.cashPill}>
+            <Banknote size={13} />
+            <span>Efectivo:</span>
+            <b>{money(collectedCash)}</b>
+          </span>
+          <span className={styles.yapePill}>
+            <Smartphone size={13} />
+            <span>Yape:</span>
+            <b>{money(collectedYape)}</b>
+          </span>
+        </div>
+      )}
     </article>)}</div>
     <div className={styles.progressSection}>
       <div className={styles.progressHeader}><span className={styles.progressTitle}>Avance de entregas <span>{number.format(pickedUp)} de {number.format(totalTickets)} tickets</span></span><strong className={styles.progressPct}>{pct}%</strong></div>

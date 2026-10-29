@@ -8,7 +8,35 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   try {
     const { supabase } = await requireSession();
-    const extra = new URL(request.url).searchParams.get('type') === 'extra';
+    const url = new URL(request.url);
+    const extra = url.searchParams.get('type') === 'extra';
+    const numberParam = url.searchParams.get('number');
+
+    if (numberParam) {
+      const num = ticketNumber(numberParam);
+      const { data: ticket, error } = await supabase
+        .from('tickets')
+        .select('id, ticket_number, student_id, is_picked_up, picked_up_at, picked_up_by, is_extra, is_paid, unit_price, movement_id, payment_method')
+        .eq('ticket_number', num)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!ticket) return NextResponse.json({ error: `Ticket #${num} no encontrado` }, { status: 404 });
+
+      let student = null;
+      if (ticket.student_id) {
+        const studentFields = 'id,name,code,dni,created_at,tickets(id,ticket_number,is_picked_up,picked_up_at,picked_up_by,movement_id,is_extra,is_paid,payment_method,unit_price)';
+        const { data: s } = await supabase
+          .from('students')
+          .select(studentFields)
+          .eq('id', ticket.student_id)
+          .maybeSingle();
+        student = s;
+      }
+
+      return NextResponse.json({ ...ticket, student });
+    }
+
     const tickets = await fetchAll(() => {
       const query = supabase.from('tickets').select('*').order('ticket_number').order('id');
       return extra ? query.eq('is_extra', true) : query;

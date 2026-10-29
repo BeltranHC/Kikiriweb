@@ -1,21 +1,21 @@
-.card { background: #fff; border: 1px solid var(--glass-border); border-radius: 13px; box-shadow: var(--shadow-sm); overflow: hidden; transition: border-color var(--transition-fast); }
-.card:hover { border-color: #c2d0e6; }
-.expandedCard { border-color: #b8cbed; }
-.cardHeader { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 22px; cursor: pointer; user-select: none; }
-.cardHeader:hover { background: #fbfcff; }
-.studentInfo { display: flex; align-items: center; gap: 13px; flex: 1; min-width: 0; }
-.avatar { width: 41px; height: 41px; border-radius: 11px; background: #edf2fb; color: #4465a1; display: flex; align-items: center; justify-content: center; font-size: 1rem; font-weight: 680; flex-shrink: 0; }
+.card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; box-shadow: var(--shadow-sm); overflow: hidden; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+.card:hover { border-color: #cbd5e1; box-shadow: var(--shadow-md); }
+.expandedCard { border-color: var(--primary); }
+.cardHeader { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 22px; cursor: pointer; user-select: none; transition: background var(--transition-fast); }
+.cardHeader:hover { background: var(--glass-bg-hover); }
+.studentInfo { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.avatar { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; font-weight: 750; flex-shrink: 0; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.28); }
 .details { min-width: 0; }
-.name { font-size: 0.88rem; font-weight: 650; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.015em; }
+.name { font-size: 0.9rem; font-weight: 680; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.015em; }
 .meta { display: flex; flex-wrap: wrap; gap: 5px 15px; margin-top: 5px; }
-.metaItem { display: inline-flex; align-items: center; gap: 2px; color: var(--text-tertiary); font-size: 0.69rem; }
+.metaItem { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 0.72rem; }
 .cardRight { display: flex; align-items: center; gap: 22px; flex-shrink: 0; }
 .progressSection { display: flex; flex-direction: column; gap: 7px; min-width: 130px; }
 .progressInfo { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
-.progressText { color: var(--text-secondary); font-size: 0.71rem; font-variant-numeric: tabular-nums; }
-.progressBar { width: 100%; height: 4px; background: #e9eef7; border-radius: 99px; overflow: hidden; }
-.progressFill { height: 100%; background: var(--success); border-radius: inherit; transition: width var(--transition-base); }
-.expandIcon { display: inline-flex; align-items: center; justify-content: center; color: #728199; transition: transform var(--transition-fast); }
+.progressText { color: var(--text-secondary); font-size: 0.73rem; font-variant-numeric: tabular-nums; font-weight: 550; }
+.progressBar { width: 100%; height: 6px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+.progressFill { height: 100%; background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%); border-radius: inherit; transition: width var(--transition-base); }
+.expandIcon { display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); transition: transform var(--transition-fast); }
 .expanded { transform: rotate(180deg); }
-.cardBody { padding: 20px 22px 22px; border-top: 1px solid #edf1f7; }
-@media (max-width: 640px) { .cardHeader { padding: 16px; gap: 12px; flex-wrap: wrap; } .studentInfo { flex-basis: calc(100% - 30px); } .cardRight { width: 100%; gap: 20px; padding-left: 54px; } .progressSection { flex: 1; } .cardBody { padding: 18px 16px; } }
+.cardBody { padding: 20px 22px 22px; border-top: 1px solid var(--border-color); }
+@media (max-width: 640px) { .cardHeader { padding: 16px; gap: 12px; flex-wrap: wrap; } .studentInfo { flex-basis: calc(100% - 30px); } .cardRight { width: 100%; gap: 20px; padding-left: 56px; } .progressSection { flex: 1; } .cardBody { padding: 18px 16px; } }

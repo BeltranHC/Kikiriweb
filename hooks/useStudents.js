@@ -3,7 +3,7 @@ import { useToast } from '@/components/Toast';
 import { requestJson } from '@/lib/client';
 import { SESSION_RESTORED_EVENT } from '@/lib/session-events.mjs';
 
-export function useStudents(query, page, { enabled = true } = {}) {
+export function useStudents(query, page, { enabled = true, pageSize = 30, status = 'all' } = {}) {
   const [students, setStudents] = useState([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -22,7 +22,12 @@ export function useStudents(query, page, { enabled = true } = {}) {
     if (!silent) setLoading(true);
     setRefreshing(true);
     try {
-      const params = new URLSearchParams({ q: query, page: String(page), pageSize: '30' });
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(pageSize),
+        ...(status && status !== 'all' ? { status } : {}),
+      });
       const data = await requestJson(`/api/students?${params}`, { signal: current.signal });
       if (current.signal.aborted || controller.current !== current) return false;
       setStudents(data.students);
@@ -43,7 +48,7 @@ export function useStudents(query, page, { enabled = true } = {}) {
         if (!current.signal.aborted) { setLoading(false); setRefreshing(false); }
       }
     }
-  }, [query, page, enabled, toast]);
+  }, [query, page, pageSize, status, enabled, toast]);
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);

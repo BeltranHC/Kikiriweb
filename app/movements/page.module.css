@@ -96,6 +96,50 @@
   color: var(--text-secondary);
 }
 
+.movementBreakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+}
+
+.studentGroupCard {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studentGroupHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.studentGroupName {
+  font-size: 0.86rem;
+  color: var(--text-primary);
+}
+
+.studentGroupCount {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(37, 99, 235, 0.08);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.studentGroupTickets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .loadingState {
   display: flex;
   flex-direction: column;

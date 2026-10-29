@@ -1,8 +1,8 @@
-.badge { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 69px; height: 43px; padding: 8px 11px; border-radius: 9px; border: 1px solid transparent; font-weight: 600; font-size: 0.8rem; transition: background var(--transition-fast), border-color var(--transition-fast); }
-.pending { background: var(--warning-bg); color: #926015; border-color: var(--warning-border); }
-.pending:hover:not(:disabled) { background: #fff0cc; border-color: #d7b96e; }
-.pickedUp { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
-.pickedUp:hover:not(:disabled) { background: #def1e6; border-color: #9dceb0; }
-.selected { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: 0 2px 5px rgba(49,95,201,0.12); }
-.selected:hover:not(:disabled) { background: var(--primary-dark); border-color: var(--primary-dark); }
+.badge { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 69px; height: 43px; padding: 8px 11px; border-radius: 9px; border: 1px solid transparent; font-weight: 600; font-size: 0.8rem; transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast); }
+.pending { background: var(--warning-bg); color: var(--warning-light); border-color: var(--warning-border); }
+.pending:hover:not(:disabled) { background: rgba(245, 158, 11, 0.2); border-color: var(--warning); transform: translateY(-1px); }
+.pickedUp { background: var(--success-bg); color: var(--success-light); border-color: var(--success-border); }
+.pickedUp:hover:not(:disabled) { background: rgba(16, 185, 129, 0.2); border-color: var(--success); }
+.selected { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; box-shadow: 0 0 12px var(--primary-glow); transform: translateY(-2px); }
+.selected:hover:not(:disabled) { background: var(--primary-dark) !important; border-color: var(--primary-dark) !important; }
 .number { font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.015em; }

@@ -42,16 +42,40 @@ export default function MovementsPage() {
       <input id="movement-search" type="search" className="input-field" value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar movimientos..." />
     </div>
     {loading ? <p role="status">Cargando historial...</p> : filtered.length ? <div className={styles.tableContainer}><table className={styles.table}>
-      <thead><tr><th>Movimiento</th><th>Tickets</th><th>Estudiante</th><th>Fecha y hora</th><th>Pago</th><th>Cajero responsable</th><th>Estado</th><th>Acción</th></tr></thead>
+      <thead><tr><th>Movimiento</th><th>Detalle de entrega (Tickets y Alumnos)</th><th>Fecha y hora</th><th>Pago</th><th>Cajero responsable</th><th>Estado</th><th>Acción</th></tr></thead>
       <tbody>{filtered.map(event => {
         const isUndo = event.kind === 'undo';
         const totals = summarizePayments(event.ticket_snapshots.map(ticket => ({ ...ticket, payment_method: isUndo ? ticket.payment_method : event.payment_method })));
-        const names = [...new Set(event.ticket_snapshots.map(ticket => ticket.student_name || 'Ticket extra'))].join(', ');
+        const groups = event.ticket_snapshots.reduce((acc, ticket) => {
+          const student = ticket.student_name || (ticket.is_extra ? 'Ticket Extra' : 'Sin asignar');
+          if (!acc[student]) acc[student] = [];
+          acc[student].push(ticket);
+          return acc;
+        }, {});
+        const studentEntries = Object.entries(groups);
         const status = isUndo ? 'Anulación' : event.activeTicketIds.length === event.ticket_ids.length ? 'Entregado' : event.activeTicketIds.length ? 'Anulado parcialmente' : 'Anulado';
         return <tr key={event.id}>
           <td title={event.id}><strong>MOV-{event.id.slice(0, 8)}</strong></td>
-          <td><div className="ticket-tags">{event.ticket_snapshots.map(ticket => <span className="badge badge-info" key={ticket.id}>#{formatTicketNumber(ticket.ticket_number)}{ticket.is_extra ? ' (Extra)' : ''}</span>)}</div></td>
-          <td>{names}</td><td>{new Date(event.created_at).toLocaleString('es-PE', { timeZone: APP_TIME_ZONE })}</td>
+          <td>
+            <div className={styles.movementBreakdown}>
+              {studentEntries.map(([student, tks]) => (
+                <div key={student} className={styles.studentGroupCard}>
+                  <div className={styles.studentGroupHeader}>
+                    <span className={styles.studentGroupName}><strong>{student}</strong></span>
+                    <span className={styles.studentGroupCount}>{tks.length} {tks.length === 1 ? 'pollada' : 'polladas'}</span>
+                  </div>
+                  <div className={styles.studentGroupTickets}>
+                    {tks.map(ticket => (
+                      <span className="badge badge-info" key={ticket.id}>
+                        #{formatTicketNumber(ticket.ticket_number)}{ticket.is_extra ? ' (Extra)' : ''}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </td>
+          <td>{new Date(event.created_at).toLocaleString('es-PE', { timeZone: APP_TIME_ZONE })}</td>
           <td>{isUndo ? 'Entrega anulada' : `${parsePayment(event.payment_method).label}${totals.total ? ` (S/ ${totals.total})` : ''}`}</td>
           <td>{event.actor_email || 'Desconocido'}</td><td><span className={`badge ${isUndo || !event.activeTicketIds.length ? 'badge-warning' : 'badge-success'}`}>{status}</span></td>
           <td>{!isUndo && event.activeTicketIds.length > 0 && <button className="btn btn-danger btn-sm" onClick={() => setUndo(event)}><Undo2 size={14} /> Anular {event.activeTicketIds.length} ticket(s)</button>}</td>

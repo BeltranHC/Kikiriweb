@@ -6,8 +6,26 @@ import { percentage } from '@/lib/utils';
 import { GraduationCap, IdCard, Ticket, ChevronDown } from 'lucide-react';
 import styles from './StudentCard.module.css';
 
-export default function StudentCard({ student, onPickUp, onUndoPickUp }) {
-  const [expanded, setExpanded] = useState(false);
+export default function StudentCard({
+  student,
+  onPickUp,
+  onUndoPickUp,
+  expanded: controlledExpanded,
+  onToggleExpand,
+  selectedTicketIds,
+  onToggleTicket,
+  hidePickupBar = false,
+}) {
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+
+  const handleToggle = () => {
+    if (onToggleExpand) {
+      onToggleExpand(!isExpanded);
+    } else {
+      setInternalExpanded(!internalExpanded);
+    }
+  };
 
   const tickets = student.tickets || [];
   const pickedUp = tickets.filter((t) => t.is_picked_up).length;
@@ -15,15 +33,15 @@ export default function StudentCard({ student, onPickUp, onUndoPickUp }) {
   const pct = percentage(pickedUp, total);
 
   return (
-    <div className={`${styles.card} ${expanded ? styles.expandedCard : ''}`}>
+    <div className={`${styles.card} ${isExpanded ? styles.expandedCard : ''}`}>
       {/* Card Header */}
       <div
         className={styles.cardHeader}
-        onClick={() => setExpanded(!expanded)}
-        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setExpanded(value => !value); } }}
+        onClick={handleToggle}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleToggle(); } }}
         role="button"
         tabIndex={0}
-        aria-expanded={expanded}
+        aria-expanded={isExpanded}
       >
         <div className={styles.studentInfo}>
           <div className={styles.avatar}>
@@ -63,20 +81,23 @@ export default function StudentCard({ student, onPickUp, onUndoPickUp }) {
               />
             </div>
           </div>
-          <span className={`${styles.expandIcon} ${expanded ? styles.expanded : ''}`}>
+          <span className={`${styles.expandIcon} ${isExpanded ? styles.expanded : ''}`}>
             <ChevronDown size={20} />
           </span>
         </div>
       </div>
 
       {/* Expandable Ticket Grid */}
-      {expanded && (
+      {isExpanded && (
         <div className={styles.cardBody}>
           {tickets.length > 0 ? (
             <TicketGrid
               tickets={tickets}
+              selectedIds={selectedTicketIds}
+              onToggleTicket={onToggleTicket}
               onPickUp={(ticketIds, paymentMethod) => onPickUp(student.id, ticketIds, paymentMethod)}
               onUndoPickUp={(ticketId, ticketNumber, movementId) => onUndoPickUp?.(student.id, ticketId, ticketNumber, movementId)}
+              hidePickupBar={hidePickupBar}
             />
           ) : (
             <div className="empty-state">
