@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { X, Save } from 'lucide-react';
 import { facultyStudentInput, SEMESTERS, PROMOTION_SEMESTER } from '@/lib/faculty.mjs';
 import { requestJson, jsonBody } from '@/lib/client';
+import styles from './StudentEditor.module.css';
 
 export default function StudentEditor({ open, student, onClose, onSaved }) {
   const dialog = useRef(null);
@@ -30,10 +31,10 @@ export default function StudentEditor({ open, student, onClose, onSaved }) {
     finally { setBusy(false); }
   };
   const change = event => setForm(value => ({ ...value, [event.target.name]: event.target.value }));
-  return <dialog ref={dialog} className="modal-content confirm-dialog" aria-labelledby={title}
+  return <dialog ref={dialog} className={`modal-content confirm-dialog ${styles.dialog}`} aria-labelledby={title}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
-    <div className="confirm-header"><h2 id={title}>{student ? 'Editar estudiante' : 'Nuevo estudiante'}</h2><button type="button" aria-label="Cerrar editor" onClick={onClose} disabled={busy}><X size={20} /></button></div>
-    <form onSubmit={submit} style={{ display: 'grid', gap: 16 }}>
+    <div className={`confirm-header ${styles.header}`}><h2 id={title}>{student ? 'Editar estudiante' : 'Nuevo estudiante'}</h2><button type="button" className={`btn btn-secondary btn-sm ${styles.closeButton}`} aria-label="Cerrar editor" onClick={onClose} disabled={busy}><X size={17} aria-hidden="true" />Cerrar</button></div>
+    <form onSubmit={submit} className={styles.form}>
       <div className="input-group"><label htmlFor="faculty-name">Nombre completo</label><input autoFocus id="faculty-name" name="name" className="input-field" required maxLength={200} value={form.name} onChange={change} disabled={busy} /></div>
       <div className="input-group"><label htmlFor="faculty-code">Código de estudiante</label><input id="faculty-code" name="code" className="input-field" required maxLength={50} value={form.code} onChange={change} disabled={busy} autoComplete="off" /></div>
       <div className="input-group"><label htmlFor="faculty-semester">Semestre</label><select id="faculty-semester" name="semester" className="input-field" value={form.semester} onChange={change} disabled={busy}><option value="">Sin semestre confirmado</option>{SEMESTERS.map((label, index) => <option key={label} value={index + 1}>{label} semestre</option>)}<option value={PROMOTION_SEMESTER}>Promoción</option></select></div>

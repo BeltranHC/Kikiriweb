@@ -1,13 +1,13 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Upload, CheckCircle } from 'lucide-react';
+import { Upload, CheckCircle, X } from 'lucide-react';
 import { MAX_CSV_BYTES } from '@/lib/csv.mjs';
 import { decodeFacultyCSV, parseFacultyCSV, semesterLabel } from '@/lib/faculty.mjs';
 import { requestJson } from '@/lib/client';
 import styles from '@/app/distribution/page.module.css';
 
-export default function FacultyImport({ onImported }) {
+export default function FacultyImport({ onImported, onClose }) {
   const [file, setFile] = useState(null);
   const [students, setStudents] = useState([]);
   const [reading, setReading] = useState(false);
@@ -40,8 +40,9 @@ export default function FacultyImport({ onImported }) {
   };
   const schools = [...new Set(students.map(student => student.school).filter(Boolean))];
   const groups = [...new Set(students.map(student => student.semester))];
-  return <section className={styles.importPanel} aria-label="Importar padrón de la facultad">
-    <div><h2>Importar padrón</h2><p>Columnas: Código, Nombres, Apellidos, Escuela Profesional y Semestre. También admite Nombre completo y semestres del I al X.</p></div>
+  return <section id="faculty-import-panel" className={styles.importPanel} aria-label="Importar padrón de la facultad">
+    <div className={styles.panelHeading}><h2>Importar padrón</h2><button type="button" className={`btn btn-secondary btn-sm ${styles.panelClose}`} onClick={onClose} disabled={busy} aria-label="Cerrar importación"><X size={17} aria-hidden="true" />Cerrar</button></div>
+    <p>Columnas: Código, Nombres, Apellidos, Escuela Profesional y Semestre. También admite Nombre completo y semestres del I al X.</p>
     <label className={styles.filePicker}><Upload size={20} /><span>{reading ? 'Leyendo padrón...' : 'Seleccionar CSV de la facultad'}<input type="file" accept=".csv,text/csv" onChange={select} disabled={busy || reading} aria-label="CSV del padrón" /></span></label>
     {error && <p role="alert" className="text-danger">{error}</p>}
     {file && <>

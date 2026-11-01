@@ -198,3 +198,49 @@ test('A visible edit action updates the complete student profile and keeps assig
   await expect(dialog.getByLabel('Código de estudiante')).toHaveValue('00124');
   await page.screenshot({path:'artifacts/ui-preview/student-editor-mobile.png',animations:'disabled'});
 });
+
+
+test('Mobile actions and panels close without saving and retain the assignment draft',async({page})=>{
+  const state=await fixture(page);await page.goto('/distribution');
+  const actions=page.getByRole('group',{name:'Acciones del padrón'});
+  for(const width of [360,390,430]) {
+    await page.setViewportSize({width,height:800});
+    const controls=[actions.getByRole('link',{name:'Historial de asignaciones'}),actions.getByRole('button',{name:'Importar padrón',exact:true}),actions.getByRole('button',{name:'Nuevo estudiante',exact:true})];
+    for(const control of controls) {
+      await expect(control).toBeVisible();await expect(control.locator('svg')).toBeVisible();
+      const box=await control.boundingBox();expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x+box.width).toBeLessThanOrEqual(width);
+    }
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({width:360,height:800});
+  await actions.getByRole('button',{name:'Importar padrón',exact:true}).click();
+  const importer=page.getByRole('region',{name:'Importar padrón de la facultad'});
+  await expect(importer.getByRole('button',{name:'Cerrar importación'})).toHaveText('Cerrar');
+  await choose(page);await page.getByLabel('Números de ticket').fill('1050, 1052-1054');
+  await importer.getByRole('button',{name:'Cerrar importación'}).click();await expect(importer).not.toBeVisible();
+  const assignment=page.getByRole('complementary',{name:'Asignar tickets al estudiante'});
+  await assignment.getByRole('button',{name:'Cerrar asignación'}).click();await expect(assignment).not.toBeVisible();
+  await expect(search(page)).toHaveValue('00123');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.getByRole('button',{name:'Continuar asignación',exact:true}).click();
+  await expect(page.getByLabel('Números de ticket')).toHaveValue('1050, 1052-1054');await expect(page.getByLabel('Números de ticket')).toBeInViewport();
+  expect(state.calls.filter(call=>call.method!=='GET')).toHaveLength(0);
+  await page.evaluate(()=>scrollTo({top:0,behavior:'instant'}));
+  await page.screenshot({path:'artifacts/ui-preview/distribution-mobile-actions.png',animations:'disabled'});
+  await actions.getByRole('button',{name:'Importar padrón',exact:true}).click();
+  await importer.scrollIntoViewIfNeeded();
+  await page.screenshot({path:'artifacts/ui-preview/distribution-mobile-import-close.png',animations:'disabled'});
+});
+
+test('The student editor has an accessible close action even on a short mobile viewport',async({page})=>{
+  await page.setViewportSize({width:360,height:480});const state=await fixture(page);await page.goto('/distribution');
+  await page.getByRole('button',{name:'Nuevo estudiante',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Nuevo estudiante'});await dialog.getByLabel('Nombre completo').fill('BORRADOR SIN GUARDAR');
+  await dialog.evaluate(element=>{element.scrollTop=element.scrollHeight;});
+  const close=dialog.getByRole('button',{name:'Cerrar editor'});await expect(close).toHaveText('Cerrar');await expect(close).toBeInViewport();
+  expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+  await page.screenshot({path:'artifacts/ui-preview/student-editor-mobile-close.png',animations:'disabled'});
+  await close.click();await expect(dialog).not.toBeVisible();
+  await page.getByRole('button',{name:'Nuevo estudiante',exact:true}).click();await dialog.getByRole('button',{name:'Cancelar',exact:true}).click();await expect(dialog).not.toBeVisible();
+  expect(state.calls.filter(call=>call.method!=='GET')).toHaveLength(0);expect(state.students).toHaveLength(3);
+});

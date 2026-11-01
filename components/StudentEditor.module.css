@@ -1,0 +1,6 @@
+.dialog { max-height: 85dvh; }
+.header { position: sticky; top: 0; z-index: 1; background: var(--bg-secondary); color: var(--text-primary); padding-bottom: 14px; }
+.header h2 { min-width: 0; font-size: 1.1rem; margin: 0; }
+.header .closeButton { display: inline-flex; min-height: 44px; flex-shrink: 0; gap: 6px; padding: 8px 10px; color: var(--text-primary); }
+.form { display: grid; gap: 16px; }
+.form p { margin-bottom: 0; }
