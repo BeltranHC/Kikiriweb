@@ -1,5 +1,8 @@
 'use client';
 
+import ModuleUnavailable from '@/components/ModuleUnavailable';
+import { DISTRIBUTION_ONLY } from '@/lib/module-mode.mjs';
+
 import { useState, useRef } from 'react';
 import { useToast } from '@/components/Toast';
 import { parseCSV, MAX_CSV_BYTES } from '@/lib/csv.mjs';
@@ -8,7 +11,7 @@ import { requestJson } from '@/lib/client';
 import { Upload, CheckCircle } from 'lucide-react';
 import styles from './page.module.css';
 
-export default function ImportPage() {
+function LegacyImportPage() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState([]);
   const [rowCount, setRowCount] = useState(0);
@@ -68,4 +71,8 @@ export default function ImportPage() {
     </div>}
     {result && <div className={styles.resultCard}><CheckCircle size={24} /><h2>Importación completada</h2><p>{result.studentsCreated} estudiantes y {result.ticketsCreated} tickets creados</p></div>}
   </div>;
+}
+
+export default function ImportPage() {
+  return DISTRIBUTION_ONLY ? <ModuleUnavailable name="Importación anterior" /> : <LegacyImportPage />;
 }

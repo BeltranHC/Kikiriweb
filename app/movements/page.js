@@ -1,5 +1,8 @@
 'use client';
 
+import ModuleUnavailable from '@/components/ModuleUnavailable';
+import { DISTRIBUTION_ONLY } from '@/lib/module-mode.mjs';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/Toast';
 import { History, RefreshCw, Undo2 } from 'lucide-react';
@@ -11,7 +14,7 @@ import { parsePayment, summarizePayments, APP_TIME_ZONE } from '@/lib/domain.mjs
 import { formatTicketNumber } from '@/lib/utils';
 import styles from './page.module.css';
 
-export default function MovementsPage() {
+function LegacyMovementsPage() {
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
   const { query, setQuery } = useSearchState('movements');
@@ -85,4 +88,8 @@ export default function MovementsPage() {
     <ConfirmModal isOpen={!!undo} title="Anular entrega" message={`Se anularán ${undo?.activeTicketIds.length || 0} ticket(s). El movimiento original y la anulación quedarán registrados.`}
       confirmText="Sí, anular" onConfirm={cancelPickup} onCancel={() => setUndo(null)} />
   </div>;
+}
+
+export default function MovementsPage() {
+  return DISTRIBUTION_ONLY ? <ModuleUnavailable name="Historial de entregas" /> : <LegacyMovementsPage />;
 }

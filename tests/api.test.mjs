@@ -6,18 +6,21 @@ import * as domain from '../lib/domain.mjs';
 import * as csv from '../lib/csv.mjs';
 import { fetchAll } from '../lib/pagination.mjs';
 import { cashReport } from '../lib/report.mjs';
+import * as faculty from '../lib/faculty.mjs';
+import * as assignmentHistory from '../lib/assignment-history.mjs';
+import { requireDeliveryEnabled } from '../lib/module-mode.mjs';
 
 const NextResponse = { json: (value, options) => Response.json(value, options) };
 async function compile(path, dependencies, exports) {
   const source = (await readFile(new URL(path, import.meta.url), 'utf8')).replace(/^import[^\n]*\n/gm, '').replace(/^export /gm, '');
   return new Function(...Object.keys(dependencies), source + '\nreturn {' + exports.join(',') + '};')(...Object.values(dependencies));
 }
-async function handlers(route, client) {
+async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
-  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'] }[route];
-  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, fetchAll, cashReport }, methods);
+  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'] }[route];
+  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
 }
-for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'] })) {
+for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
     const client = { auth: { getUser: async () => ({ data: { user: null }, error: null }) }, from: () => assert.fail('Database must not be accessed') };
     const response = await (await handlers(route, client))[method]({ json: () => assert.fail('Body must not be read'), formData: () => assert.fail('File must not be read') });
@@ -138,4 +141,65 @@ test('GET /api/tickets?number= looks up a single ticket and its student', async 
   const data = await res.json();
   assert.equal(data.ticket_number, 42);
   assert.equal(data.student.name, 'Estudiante Test');
+});
+
+
+test('Faculty API validates directory filters before calling PostgreSQL', async () => {
+  const calls=[];
+  const client=authenticated(async (name,args) => { calls.push({name,args}); return {data:{students:[],total:0},error:null}; });
+  const route=await handlers('faculty',client);
+  assert.equal((await route.GET({url:'http://localhost/api/faculty?semester=12'})).status,400);
+  assert.equal(calls.length,0);
+  assert.equal((await route.GET({url:'http://localhost/api/faculty?q=Jose&semester=2&page=3'})).status,200);
+  assert.equal(calls[0].name,'faculty_directory'); assert.equal(calls[0].args.p_semester,2); assert.equal(calls[0].args.p_page,3);
+  assert.equal((await route.GET({url:'http://localhost/api/faculty?semester=11'})).status,200);
+  assert.equal(calls[1].args.p_semester,11);
+});
+test('Faculty edits require a version and propagate code conflicts',async () => {
+  const calls=[];
+  const client=authenticated(async (name,args) => {calls.push({name,args});return {data:null,error:{code:'23505',message:'students_code_unique_idx'}};});
+  const route=await handlers('faculty',client);
+  assert.equal((await route.PATCH({json:async () => ({id:user.id,name:'Demo',code:'00123'})})).status,400);
+  assert.equal(calls.length,0);
+  const response=await route.POST({json:async () => ({name:'Demo',code:'00123',semester:'VI'})});
+  assert.equal(response.status,409); assert.match((await response.json()).error,/código/);
+  assert.equal(calls[0].args.p_semester,6);
+});
+test('Faculty import sends the entire validated roster once and never sends ticket data', async () => {
+  const calls=[];
+  const client=authenticated(async (name,args) => { calls.push({name,args}); return {data:{studentsCreated:1,studentsExisting:0},error:null}; });
+  const request=text=>({headers:new Headers(),formData:async()=>new Map([['file',{name:'roster.csv',size:Buffer.byteLength(text),arrayBuffer:async()=>new TextEncoder().encode(text).buffer}]])});
+  const route=await handlers('faculty/import',client);
+  assert.equal((await route.POST(request('codigo,nombre,semestre\n00123,Demo,II\n00123,Repeated,II'))).status,400);
+  assert.equal(calls.length,0);
+  assert.equal((await route.POST(request('codigo,nombre,semestre\n00123,Demo,II'))).status,200);
+  assert.equal(calls.length,1); assert.equal(calls[0].name,'import_faculty_roster'); assert.equal(calls[0].args.p_rows[0].code,'00123');
+  assert.equal('tickets' in calls[0].args.p_rows[0],false);
+});
+test('Assignment API rejects duplicate numbers and forwards a single atomic batch', async () => {
+  const calls=[];
+  const client=authenticated(async(name,args)=>{ calls.push({name,args});return {data:{ticketsCreated:2},error:null};});
+  const route=await handlers('faculty/assignments',client);
+  assert.equal((await route.POST({json:async()=>({studentId:user.id,ticketNumbers:[1050,1050]})})).status,400);
+  assert.equal(calls.length,0);
+  assert.equal((await route.POST({json:async()=>({studentId:user.id,ticketNumbers:[1051,1050]})})).status,201);
+  assert.equal(calls.length,1);assert.equal(calls[0].name,'assign_student_tickets');assert.deepEqual(calls[0].args.p_ticket_numbers,[1050,1051]);
+});
+
+
+for(const [route,methods] of Object.entries({students:['GET','POST','DELETE'],tickets:['GET','POST','PATCH'],movements:['GET'],import:['POST'],stats:['GET'],export:['GET']})) {
+  for(const method of methods) test(`${method} /api/${route} is locked during the distribution-only phase before any data access`,async()=>{
+    const client={...authenticated(()=>assert.fail('Locked modules must not call RPCs')),from:()=>assert.fail('Locked modules must not query tables')};
+    const response=await (await handlers(route,client,{deliveryEnabled:false}))[method]({json:()=>assert.fail('No body reads'),formData:()=>assert.fail('No file reads')});
+    assert.equal(response.status,423);assert.equal((await response.json()).error,'Temporalmente inhabilitado');
+  });
+}
+test('Assignment history remains available in distribution-only mode and forwards Lima date boundaries',async()=>{
+  const calls=[];const client=authenticated(async(name,args)=>{calls.push({name,args});return {data:{assignments:[],total:0},error:null};});
+  const route=await handlers('faculty/assignments',client,{deliveryEnabled:false});
+  const response=await route.GET({url:'http://localhost/api/faculty/assignments?q=00123&from=2026-10-31&to=2026-10-31&semester=11&page=2'});
+  assert.equal(response.status,200);assert.equal(calls[0].name,'faculty_assignment_history');
+  assert.equal(calls[0].args.p_from,'2026-10-31T05:00:00.000Z');assert.equal(calls[0].args.p_until,'2026-11-01T05:00:00.000Z');assert.equal(calls[0].args.p_semester,11);
+  assert.equal((await route.GET({url:'http://localhost/api/faculty/assignments?from=2026-11-02&to=2026-10-31'})).status,400);
+  assert.equal(calls.length,1);
 });

@@ -1,3 +1,4 @@
+import { requireDeliveryEnabled } from '@/lib/module-mode.mjs';
 import { NextResponse } from 'next/server';
 import { requireSession, apiError } from '@/lib/api';
 import { fetchAll } from '@/lib/pagination.mjs';
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   try {
     const { supabase } = await requireSession();
+    requireDeliveryEnabled();
     const url = new URL(request.url);
     const extra = url.searchParams.get('type') === 'extra';
     const numberParam = url.searchParams.get('number');
@@ -48,6 +50,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const { supabase } = await requireSession();
+    requireDeliveryEnabled();
     const body = await request.json();
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ValidationError('Datos de ticket inválidos');
     const number = ticketNumber(body.ticketNumber);
@@ -64,6 +67,7 @@ export async function POST(request) {
 export async function PATCH(request) {
   try {
     const { supabase } = await requireSession();
+    requireDeliveryEnabled();
     const input = pickupInput(await request.json());
     const { data, error } = await supabase.rpc('update_ticket_pickup', {
       p_ticket_ids: input.ticketIds, p_is_picked_up: input.isPickedUp,

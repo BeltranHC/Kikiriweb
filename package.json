@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/clean-next.mjs",
+    "predev": "node scripts/clean-next.mjs development",
     "prebuild": "node scripts/clean-next.mjs",
     "dev": "next dev",
     "build": "next build",
@@ -12,7 +12,10 @@
     "seed": "node scripts/seed.mjs",
     "test": "node --test",
     "create-user": "node scripts/create-user.mjs",
-    "test:ui": "playwright test"
+    "test:ui": "playwright test",
+    "prepare:faculty": "node scripts/prepare-faculty.mjs",
+    "prepare:dedup": "node scripts/prepare-promotion-dedup.mjs",
+    "create-distributors": "node scripts/create-distributors.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

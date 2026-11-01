@@ -22,3 +22,8 @@
   .mobileLabel { font-size: 0.64rem; font-weight: 590; }
 }
 @media (max-width: 640px) { .navContent { padding: 0 18px; } .brandIcon { width: 35px; height: 35px; border-radius: 10px; } .brandText { font-size: 1rem; } .logoutLabel { display: none; } .logoutBtn { padding: 9px; } }
+
+@media (min-width: 1025px) and (max-width: 1180px) { .navContent { gap: 10px; padding: 0 20px; } .navLink { padding: 9px 8px; gap: 5px; } }
+
+.locked { color: var(--text-tertiary); }
+.lockedLabel { display: block; font-size: .57rem; font-weight: 450; margin-top: 2px; }

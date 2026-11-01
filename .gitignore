@@ -49,3 +49,6 @@ next-env.d.ts
 
 # Local review screenshots and browser test results
 /artifacts/
+
+# Development cache is independent from production builds
+/.next-dev/

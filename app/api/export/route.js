@@ -1,3 +1,4 @@
+import { requireDeliveryEnabled } from '@/lib/module-mode.mjs';
 import { requireSession, apiError } from '@/lib/api';
 import { fetchAll } from '@/lib/pagination.mjs';
 import { dayBounds } from '@/lib/domain.mjs';
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   try {
     const { supabase } = await requireSession();
+    requireDeliveryEnabled();
     let bounds;
     try { bounds = dayBounds(new URL(request.url).searchParams.get('date') || undefined); }
     catch { throw new ValidationError('Fecha inválida'); }

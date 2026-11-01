@@ -1,5 +1,8 @@
 'use client';
 
+import ModuleUnavailable from '@/components/ModuleUnavailable';
+import { DISTRIBUTION_ONLY } from '@/lib/module-mode.mjs';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/Toast';
 import { Ticket } from 'lucide-react';
@@ -9,7 +12,7 @@ import { requestJson, jsonBody } from '@/lib/client';
 import { SESSION_RESTORED_EVENT } from '@/lib/session-events.mjs';
 import styles from './page.module.css';
 
-export default function ExtrasPage() {
+function LegacyExtrasPage() {
   const [extras, setExtras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [number, setNumber] = useState('');
@@ -55,4 +58,8 @@ export default function ExtrasPage() {
     <ConfirmModal isOpen={!!undo} title="Anular entrega" message={`¿Anular la entrega del ticket #${undo?.ticketNumber || ''}?`}
       confirmText="Anular" onConfirm={cancelPickup} onCancel={() => setUndo(null)} />
   </div>;
+}
+
+export default function ExtrasPage() {
+  return DISTRIBUTION_ONLY ? <ModuleUnavailable name="Extras" /> : <LegacyExtrasPage />;
 }

@@ -1,13 +1,15 @@
+import { requireDeliveryEnabled } from '@/lib/module-mode.mjs';
 import { NextResponse } from 'next/server';
 import { requireSession, apiError, HttpError } from '@/lib/api';
 import { studentInput, validateUuid, ValidationError } from '@/lib/validation.mjs';
 
 export const dynamic = 'force-dynamic';
-const fields = 'id,name,code,dni,created_at,tickets(id,ticket_number,is_picked_up,picked_up_at,picked_up_by,movement_id,is_extra,is_paid,payment_method,unit_price)';
+const fields = 'id,name,code,dni,created_at,semester,school,roster_updated_at,tickets(id,ticket_number,is_picked_up,picked_up_at,picked_up_by,movement_id,is_extra,is_paid,payment_method,unit_price)';
 
 export async function GET(request) {
   try {
     const { supabase } = await requireSession();
+    requireDeliveryEnabled();
     const params = new URL(request.url).searchParams;
     const query = (params.get('q') || '').trim();
     const status = (params.get('status') || 'all').toLowerCase();
@@ -83,6 +85,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const { supabase } = await requireSession();
+    requireDeliveryEnabled();
     const student = studentInput(await request.json());
     const { data, error } = await supabase.rpc('create_student_with_tickets', { p_name: student.name, p_code: student.code, p_dni: student.dni, p_ticket_numbers: student.tickets });
     if (error) throw error;
@@ -93,6 +96,7 @@ export async function POST(request) {
 export async function DELETE(request) {
   try {
     const { supabase } = await requireSession();
+    requireDeliveryEnabled();
     const id = validateUuid(new URL(request.url).searchParams.get('id'));
     const { data, error } = await supabase.rpc('delete_student', { p_student_id: id });
     if (error) throw error;

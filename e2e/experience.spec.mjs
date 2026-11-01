@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { DISTRIBUTION_ONLY } from '../lib/module-mode.mjs';
+test.skip(DISTRIBUTION_ONLY, 'El módulo de entregas está temporalmente inhabilitado. Estas pruebas se reactivan al habilitarlo.');
 
 const uuid = number => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 async function fixtures(page) {
@@ -45,7 +47,7 @@ const searchInput = page => page.getByRole('searchbox', { name: 'Buscar estudian
 async function searchMaria(page) {
   const search = searchInput(page); await search.fill('María');
   await expect(page.getByRole('button', { name: /María Pérez/ })).toBeVisible();
-  await expect(page.getByText('1 estudiantes', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('1 estudiante', { exact: true }).first()).toBeVisible();
   return search;
 }
 
@@ -55,21 +57,23 @@ test('Light design ignores the previous dark preference and renders desktop and 
   await expect(page.getByRole('heading', { name: 'Control de entregas' })).toBeVisible();
   await expect(searchInput(page)).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(245, 247, 251)');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(248, 250, 252)');
+  await page.getByRole('button', { name: 'Métricas completas', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Resumen de entregas' })).toBeVisible();
   await expect(page.getByRole('button', { name: /María Pérez/ })).toBeVisible();
   await page.screenshot({ path: 'artifacts/ui-preview/dashboard-desktop.png' });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Bienvenido de nuevo' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'KikiriWeb', exact: true })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Correo electrónico', exact: true })).toBeVisible();
   await page.screenshot({ path: 'artifacts/ui-preview/login-desktop.png' });
 });
 
 test('Automatic updates pause while typing and resume without clearing text, focus or navigating', async ({ page }) => {
   const state = await fixtures(page); await page.clock.install(); await page.goto('/dashboard');
-  await searchMaria(page); await expect(page.getByText('Actualización en pausa')).toBeVisible();
+  await searchMaria(page);
   const before = state.calls.filter(call => call.path === '/api/students').length;
   await page.clock.fastForward(61000);
+  await expect(page.getByText('En pausa', { exact: true })).toBeVisible();
   await expect(searchInput(page)).toHaveValue('María'); await expect(searchInput(page)).toBeFocused();
   expect(state.calls.filter(call => call.path === '/api/students').length).toBe(before);
   await searchInput(page).blur();

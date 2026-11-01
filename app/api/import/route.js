@@ -1,3 +1,4 @@
+import { requireDeliveryEnabled } from '@/lib/module-mode.mjs';
 import { NextResponse } from 'next/server';
 import { requireSession, apiError, HttpError } from '@/lib/api';
 import { parseCSV, MAX_CSV_BYTES } from '@/lib/csv.mjs';
@@ -6,6 +7,7 @@ import { importRows, ValidationError } from '@/lib/validation.mjs';
 export async function POST(request) {
   try {
     const { supabase } = await requireSession();
+    requireDeliveryEnabled();
     if (Number(request.headers.get('content-length')) > MAX_CSV_BYTES + 65536) throw new HttpError('El archivo supera 2 MB', 413);
     const file = (await request.formData()).get('file');
     if (!file || typeof file.text !== 'function' || !/\.csv$/i.test(file.name || '')) throw new ValidationError('Selecciona un archivo CSV');

@@ -1,5 +1,8 @@
 'use client';
 
+import ModuleUnavailable from '@/components/ModuleUnavailable';
+import { DISTRIBUTION_ONLY } from '@/lib/module-mode.mjs';
+
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useToast } from '@/components/Toast';
 import {
@@ -86,7 +89,7 @@ function playScannerSound(type = 'success', enabled = true) {
   }
 }
 
-export default function DashboardPage() {
+function LegacyDashboardPage() {
   const [stats, setStats] = useState(null);
   const [showFullStats, setShowFullStats] = useState(false);
   const { query: searchQuery, page, ready, setQuery, setPage } = useSearchState('dashboard');
@@ -801,4 +804,8 @@ export default function DashboardPage() {
       />
     </div>
   );
+}
+
+export default function DashboardPage() {
+  return DISTRIBUTION_ONLY ? <ModuleUnavailable name="Entregas" /> : <LegacyDashboardPage />;
 }

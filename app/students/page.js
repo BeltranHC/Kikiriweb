@@ -1,23 +1,29 @@
 'use client';
 
+import ModuleUnavailable from '@/components/ModuleUnavailable';
+import { DISTRIBUTION_ONLY } from '@/lib/module-mode.mjs';
+
 import { useState } from 'react';
 import { useToast } from '@/components/Toast';
-import { Save, Trash2, GraduationCap } from 'lucide-react';
+import { Save, Trash2, GraduationCap, Pencil } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
 import Pagination from '@/components/Pagination';
 import ConfirmModal from '@/components/ConfirmModal';
+import StudentEditor from '@/components/StudentEditor';
+import { semesterLabel } from '@/lib/faculty.mjs';
 import { useStudents } from '@/hooks/useStudents';
 import { useSearchState } from '@/hooks/useSearchState';
 import { requestJson, jsonBody } from '@/lib/client';
 import styles from './page.module.css';
 
 const emptyForm = { name: '', code: '', dni: '', ticketStart: '', ticketEnd: '' };
-export default function StudentsPage() {
+function LegacyStudentsPage() {
   const { query, page, ready, setQuery, setPage } = useSearchState('students');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [editing, setEditing] = useState(null);
   const { students, total, hasMore, loading, refresh } = useStudents(query, page, { enabled: ready });
   const toast = useToast();
   const submit = async event => {
@@ -61,15 +67,20 @@ export default function StudentsPage() {
     <SearchBar value={query} onSearch={setQuery} />
     {loading && <p role="status" className="text-muted">Actualizando estudiantes...</p>}
     {students.length > 0 ? <div className={styles.tableWrapper}><table className={styles.table}>
-      <thead><tr><th>Nombre</th><th>Código</th><th>DNI</th><th>Tickets</th><th>Recogidos</th><th>Acciones</th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Código</th><th>DNI</th><th>Semestre</th><th>Tickets</th><th>Recogidos</th><th>Acciones</th></tr></thead>
       <tbody>{students.map(student => <tr key={student.id}>
-        <td>{student.name}</td><td>{student.code || '-'}</td><td>{student.dni || '-'}</td>
+        <td>{student.name}</td><td>{student.code || '-'}</td><td>{student.dni || '-'}</td><td>{semesterLabel(student.semester)}</td>
         <td>{student.tickets?.length || 0}</td><td>{student.tickets?.filter(ticket => ticket.is_picked_up).length || 0}/{student.tickets?.length || 0}</td>
-        <td><button className="btn btn-danger btn-sm" aria-label={`Eliminar a ${student.name}`} onClick={() => setDeleting(student)}><Trash2 size={16} /></button></td>
+        <td><button className="btn btn-secondary btn-sm" aria-label={`Editar a ${student.name}`} onClick={() => setEditing(student)}><Pencil size={16} /></button> <button className="btn btn-danger btn-sm" aria-label={`Eliminar a ${student.name}`} onClick={() => setDeleting(student)}><Trash2 size={16} /></button></td>
       </tr>)}</tbody>
     </table></div> : !loading && <div className="empty-state"><GraduationCap size={48} /><h3>No hay estudiantes</h3></div>}
     <Pagination page={page} total={total} hasMore={hasMore} loading={loading} onPageChange={setPage} />
+    <StudentEditor open={!!editing} student={editing} onClose={() => setEditing(null)} onSaved={() => { toast.success('Estudiante actualizado'); refresh(true); }} />
     <ConfirmModal isOpen={!!deleting} title="Eliminar estudiante" message={`¿Eliminar a ${deleting?.name || ''} y sus tickets? Los estudiantes con movimientos registrados deben conservarse.`}
       confirmText="Eliminar" onConfirm={remove} onCancel={() => setDeleting(null)} />
   </div>;
+}
+
+export default function StudentsPage() {
+  return DISTRIBUTION_ONLY ? <ModuleUnavailable name="Estudiantes" /> : <LegacyStudentsPage />;
 }

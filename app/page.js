@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
+import { APP_HOME_ROUTE } from '@/lib/module-mode.mjs';
 import { Bird, XCircle, Mail, Lock, LogIn, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -30,7 +31,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.replace('/dashboard');
+      router.replace(APP_HOME_ROUTE);
       router.refresh();
     } catch {
       setError('Error al conectar con el servidor. Intenta de nuevo.');

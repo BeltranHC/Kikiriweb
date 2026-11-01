@@ -1,0 +1,6 @@
+.panel { max-width: 620px; margin: 55px auto; padding: 52px 32px; border: 1px solid var(--border-color); border-radius: 22px; background: var(--bg-secondary); text-align: center; box-shadow: var(--shadow-md); }
+.icon { display: inline-flex; padding: 20px; color: var(--primary); background: var(--primary-glow); border-radius: 20px; }
+.label { color: var(--text-tertiary); font-size: .72rem; font-weight: 700; letter-spacing: .08em; margin: 23px 0 10px; }
+.panel h1 { font-size: clamp(1.4rem,3.5vw,2rem); letter-spacing: -.04em; }
+.description { color: var(--text-secondary); font-size: .92rem; line-height: 1.8; margin: 15px auto 25px; max-width: 440px; }
+@media(max-width:600px) { .panel { margin: 25px auto; padding: 38px 20px; } }
