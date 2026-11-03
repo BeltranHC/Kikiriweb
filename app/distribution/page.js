@@ -107,9 +107,9 @@ export default function DistributionPage() {
         </div>
     </section>
     <section className={styles.metrics} aria-label="Resumen del padrón">
-      <div><Users size={21} /><span>Personas en padrón<strong>{directory.summary.totalStudents ?? '—'}</strong></span></div>
-      <div><Ticket size={21} /><span>Con tickets asignados<strong>{directory.summary.withTickets ?? '—'}</strong></span></div>
-      <div><UserPlus size={21} /><span>Sin tickets asignados<strong>{directory.summary.withoutTickets ?? '—'}</strong></span></div>
+      <div><Users size={21} /><span>Total de participantes<strong>{directory.summary.totalStudents ?? '—'}</strong></span></div>
+      <div><UserPlus size={21} /><span>Participantes sin tickets<strong>{directory.summary.withoutTickets ?? '—'}</strong></span></div>
+      <div><Ticket size={21} /><span>Tickets repartidos<strong>{directory.summary.totalAssignedTickets ?? '—'}</strong><small>Incluye Promoción</small></span></div>
     </section>
     {importing && <FacultyImport onImported={directory.refresh} onClose={() => setImporting(false)} />}
     <div className={`${styles.workspace} ${assignmentClosed ? styles.workspaceClosed : ''}`}>

@@ -147,7 +147,8 @@ test('GET /api/tickets?number= looks up a single ticket and its student', async 
 
 test('Faculty API validates directory filters before calling PostgreSQL', async () => {
   const calls=[];
-  const client=authenticated(async (name,args) => { calls.push({name,args}); return {data:{students:[],total:0},error:null}; });
+  const client={...authenticated(async (name,args) => { calls.push({name,args}); return {data:{students:[],total:0,summary:{totalStudents:1500,withoutTickets:99}},error:null}; }),
+    from(table) {assert.equal(table,'tickets');return {select(fields,options) {assert.equal(fields,'id');assert.deepEqual(options,{head:true,count:'exact'});return {not:async(field,operator,value)=>{assert.equal(field,'student_id');assert.equal(operator,'is');assert.equal(value,null);return {count:2450,error:null};}};}};}};
   const route=await handlers('faculty',client);
   assert.equal((await route.GET({url:'http://localhost/api/faculty?semester=12'})).status,400);
   assert.equal(calls.length,0);
@@ -155,6 +156,8 @@ test('Faculty API validates directory filters before calling PostgreSQL', async 
   assert.equal(calls[0].name,'faculty_recipient_directory'); assert.equal(calls[0].args.p_semester,2); assert.equal(calls[0].args.p_page,3);
   assert.equal((await route.GET({url:'http://localhost/api/faculty?semester=11'})).status,200);
   assert.equal(calls[1].args.p_semester,11);
+  const data=await (await route.GET({url:'http://localhost/api/faculty?q=only-one-person&type=teacher'})).json();
+  assert.deepEqual(data.summary,{totalStudents:1500,withoutTickets:99,totalAssignedTickets:2450});
 });
 test('Faculty edits require a version and propagate code conflicts',async () => {
   const calls=[];

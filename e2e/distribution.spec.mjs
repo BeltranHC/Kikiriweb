@@ -34,7 +34,7 @@ async function fixture(page) {
       const query=fold(url.searchParams.get('q') || ''); const semester=url.searchParams.get('semester') || 'all'; const type=url.searchParams.get('type')||'all';
       const students=state.students.filter(student => query.split(/\s+/).every(token => fold(student.name+' '+student.code).includes(token)) && (semester==='all' || (student.semester ?? 0)===Number(semester)) && (type==='all'||(student.recipient_type||'student')===type))
         .sort((a,b)=>(a.semester??12)-(b.semester??12) || a.name.localeCompare(b.name));
-      await route.fulfill({json:{categories:['student','external','teacher'].map(type=>({type,count:state.students.filter(s=>(s.recipient_type||'student')===type).length})),students,total:students.length,hasMore:false,page:1,pageSize:30,semesters:[null,1,2,3,4,5,6,7,8,9,10,11].map(semester=>({semester,count:state.students.filter(s=>s.semester===semester).length})),summary:{totalStudents:state.students.length,withTickets:state.students.filter(s=>s.tickets.length).length,withoutTickets:state.students.filter(s=>!s.tickets.length).length}}});
+      await route.fulfill({json:{categories:['student','external','teacher'].map(type=>({type,count:state.students.filter(s=>(s.recipient_type||'student')===type).length})),students,total:students.length,hasMore:false,page:1,pageSize:30,semesters:[null,1,2,3,4,5,6,7,8,9,10,11].map(semester=>({semester,count:state.students.filter(s=>s.semester===semester).length})),summary:{totalAssignedTickets:state.students.reduce((total,person)=>total+person.tickets.length,0),totalStudents:state.students.length,withTickets:state.students.filter(s=>s.tickets.length).length,withoutTickets:state.students.filter(s=>!s.tickets.length).length}}});
     } else if (url.pathname === '/api/faculty' && ['POST','PATCH'].includes(method)) {
       const body=route.request().postDataJSON();
       let student=state.students.find(s=>s.id===body.id);
@@ -318,4 +318,19 @@ test('Mobile CSV download exports all participants independently of filters and 
   expect(rows.find(row=>row.codigo==='00123').tickets_asignados).toBe('1000');expect(rows.find(row=>row.nombre==='VISITANTE CSV').tickets_asignados).toBe('2050');expect(rows.find(row=>row.nombre==='DOCENTE SIN TICKETS').cantidad_tickets).toBe('0');
   await expect(search(page)).toHaveValue('00123');await expect(page.getByLabel('Números de ticket')).toHaveValue('1060-1062');await expect(button).toBeEnabled();
   expect(state.calls.filter(call=>call.method!=='GET')).toHaveLength(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+
+test('Main totals remain global, include legacy Promotion tickets and update after assigning and releasing tickets',async({page})=>{
+  await page.setViewportSize({width:390,height:844});const state=await fixture(page);state.students[0].semester=11;state.assignments=[];
+  const summary=page.getByRole('region',{name:'Resumen del padrón'});const total=summary.locator('div').filter({hasText:'Total de participantes'});
+  const pending=summary.locator('div').filter({hasText:'Participantes sin tickets'});const distributed=summary.locator('div').filter({hasText:'Tickets repartidos'});
+  await page.goto('/distribution');await expect(total.locator('strong')).toHaveText('3');await expect(pending.locator('strong')).toHaveText('2');await expect(distributed.locator('strong')).toHaveText('1');await expect(distributed).toContainText('Incluye Promoción');
+  await page.getByRole('group',{name:'Filtrar por semestre'}).getByRole('button',{name:/^VI /}).click();await expect(page.getByRole('article')).toHaveCount(1);await expect(distributed.locator('strong')).toHaveText('1');await expect(pending.locator('strong')).toHaveText('2');
+  await page.getByRole('article').getByRole('button',{name:'Asignar tickets',exact:true}).click();await page.getByLabel('Números de ticket').fill('1050-1052');await page.getByRole('button',{name:'Asignar 3 tickets',exact:true}).click();await page.getByRole('button',{name:'Confirmar y asignar'}).click();
+  await expect(distributed.locator('strong')).toHaveText('4');await expect(pending.locator('strong')).toHaveText('1');await expect(total.locator('strong')).toHaveText('3');
+  const assignment=page.getByRole('complementary',{name:'Asignar tickets al estudiante'});await assignment.locator('summary').filter({hasText:'Ver y editar'}).click();await assignment.getByRole('button',{name:'Editar ticket 1050',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Editar ticket #1050'});await dialog.getByLabel('Operación').selectOption('release');await dialog.getByRole('button',{name:'Retirar asignación',exact:true}).click();await expect(dialog).not.toBeVisible();
+  await expect(distributed.locator('strong')).toHaveText('3');await expect(pending.locator('strong')).toHaveText('1');expect(state.students[0].tickets[0].ticket_number).toBe(1000);
+  await page.evaluate(()=>scrollTo({top:0,behavior:'instant'}));expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'artifacts/ui-preview/distribution-main-totals-mobile.png',animations:'disabled'});
 });

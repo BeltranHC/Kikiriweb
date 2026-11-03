@@ -79,3 +79,5 @@
 .assignedTickets small { flex-basis: 100%; color: var(--text-tertiary); }
 .recipientOptions { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
 .recipientOptions button { white-space: normal; text-align: left; justify-content: flex-start; min-height: 44px; }
+
+.metrics small { display: block; color: var(--text-tertiary); font-size: .65rem; line-height: 1.4; margin-top: 5px; }

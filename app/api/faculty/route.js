@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireSession, apiError } from '@/lib/api';
+import { requireSession, apiError, HttpError } from '@/lib/api';
 import { ValidationError } from '@/lib/validation.mjs';
 import { facultyStudentInput, facultyEditInput, PROMOTION_SEMESTER, recipientType } from '@/lib/faculty.mjs';
 
@@ -14,12 +14,19 @@ export async function GET(request) {
     const semester = params.has('semester') && params.get('semester') !== 'all' ? Number(params.get('semester')) : null;
     if (query.length > 200 || !Number.isSafeInteger(page) || page < 1 || page > 1000000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100 || (semester !== null && (!Number.isInteger(semester) || semester < 0 || semester > PROMOTION_SEMESTER))) throw new ValidationError('Filtros del padrón inválidos');
     const type = params.get('type') || 'all'; if (type !== 'all') recipientType(type);
-    let { data, error } = await supabase.rpc('faculty_recipient_directory', { p_query: query, p_semester: semester, p_recipient_type: type === 'all' ? null : type, p_page: page, p_page_size: pageSize });
+    const [directory, ticketCount] = await Promise.all([
+      supabase.rpc('faculty_recipient_directory', { p_query: query, p_semester: semester, p_recipient_type: type === 'all' ? null : type, p_page: page, p_page_size: pageSize }),
+      // Current ownership includes legacy Promotion tickets and counts transfers only once.
+      supabase.from('tickets').select('id', { head: true, count: 'exact' }).not('student_id', 'is', null),
+    ]);
+    let { data, error } = directory;
     if (error?.code === 'PGRST202' && ['all','student'].includes(type)) {
       ({ data, error } = await supabase.rpc('faculty_directory', { p_query: query, p_semester: semester, p_page: page, p_page_size: pageSize }));
     }
     if (error) throw error;
-    return NextResponse.json(data, { headers: { 'Cache-Control': 'private, no-store' } });
+    if (ticketCount.error) throw ticketCount.error;
+    if (!Number.isSafeInteger(ticketCount.count) || ticketCount.count < 0) throw new HttpError('No se pudo calcular el total de tickets repartidos', 503);
+    return NextResponse.json({ ...data, summary: { ...data.summary, totalAssignedTickets: ticketCount.count } }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) { return apiError(error); }
 }
 async function save(request, edit) {
