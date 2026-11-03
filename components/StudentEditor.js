@@ -2,19 +2,19 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { X, Save } from 'lucide-react';
-import { facultyStudentInput, SEMESTERS, PROMOTION_SEMESTER } from '@/lib/faculty.mjs';
+import { facultyStudentInput, SEMESTERS, PROMOTION_SEMESTER, RECIPIENT_TYPES } from '@/lib/faculty.mjs';
 import { requestJson, jsonBody } from '@/lib/client';
 import styles from './StudentEditor.module.css';
 
 export default function StudentEditor({ open, student, onClose, onSaved }) {
   const dialog = useRef(null);
   const title = useId();
-  const [form, setForm] = useState({ name: '', code: '', semester: '', school: 'FINESI' });
+  const [form, setForm] = useState({ name: '', code: '', semester: '', school: 'FINESI', recipientType: 'student' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
     if (!open) { dialog.current?.close(); return; }
-    setForm({ name: student?.name || '', code: student?.code || '', semester: String(student?.semester ?? ''), school: student?.school ?? 'FINESI' });
+    setForm({ name: student?.name || '', code: student?.code || '', semester: String(student?.semester ?? ''), school: student?.school ?? 'FINESI', recipientType: student?.recipient_type || 'student' });
     setError(''); dialog.current.showModal();
   }, [open, student]);
   const submit = async event => {
@@ -30,14 +30,15 @@ export default function StudentEditor({ open, student, onClose, onSaved }) {
     } catch (issue) { setError(issue.message); }
     finally { setBusy(false); }
   };
-  const change = event => setForm(value => ({ ...value, [event.target.name]: event.target.value }));
+  const change = event => setForm(value => ({ ...value, [event.target.name]: event.target.value, ...(event.target.name === 'recipientType' && event.target.value !== 'student' ? { semester: '' } : {}) }));
   return <dialog ref={dialog} className={`modal-content confirm-dialog ${styles.dialog}`} aria-labelledby={title}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
     <div className={`confirm-header ${styles.header}`}><h2 id={title}>{student ? 'Editar estudiante' : 'Nuevo estudiante'}</h2><button type="button" className={`btn btn-secondary btn-sm ${styles.closeButton}`} aria-label="Cerrar editor" onClick={onClose} disabled={busy}><X size={17} aria-hidden="true" />Cerrar</button></div>
     <form onSubmit={submit} className={styles.form}>
+      <div className="input-group"><label htmlFor="faculty-type">Tipo de participante</label><select id="faculty-type" name="recipientType" className="input-field" value={form.recipientType} onChange={change} disabled={busy}>{Object.entries(RECIPIENT_TYPES).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div>
       <div className="input-group"><label htmlFor="faculty-name">Nombre completo</label><input autoFocus id="faculty-name" name="name" className="input-field" required maxLength={200} value={form.name} onChange={change} disabled={busy} /></div>
-      <div className="input-group"><label htmlFor="faculty-code">Código de estudiante</label><input id="faculty-code" name="code" className="input-field" required maxLength={50} value={form.code} onChange={change} disabled={busy} autoComplete="off" /></div>
-      <div className="input-group"><label htmlFor="faculty-semester">Semestre</label><select id="faculty-semester" name="semester" className="input-field" value={form.semester} onChange={change} disabled={busy}><option value="">Sin semestre confirmado</option>{SEMESTERS.map((label, index) => <option key={label} value={index + 1}>{label} semestre</option>)}<option value={PROMOTION_SEMESTER}>Promoción</option></select></div>
+      <div className="input-group"><label htmlFor="faculty-code">{form.recipientType === 'student' ? 'Código de estudiante' : 'Código o documento (opcional)'}</label><input id="faculty-code" name="code" className="input-field" required={form.recipientType === 'student'} maxLength={50} value={form.code} onChange={change} disabled={busy} autoComplete="off" /></div>
+      {form.recipientType === 'student' && <div className="input-group"><label htmlFor="faculty-semester">Semestre</label><select id="faculty-semester" name="semester" className="input-field" value={form.semester} onChange={change} disabled={busy}><option value="">Sin semestre confirmado</option>{SEMESTERS.map((label, index) => <option key={label} value={index + 1}>{label} semestre</option>)}<option value={PROMOTION_SEMESTER}>Promoción</option></select></div>}
       <div className="input-group"><label htmlFor="faculty-school">Escuela profesional</label><input id="faculty-school" name="school" className="input-field" maxLength={120} value={form.school} onChange={change} disabled={busy} /></div>
       <p className="text-muted">Puedes corregir los datos y el semestre actual. Sus tickets permanecen asociados al guardar.</p>
       {error && <p role="alert" className="text-danger">{error}</p>}

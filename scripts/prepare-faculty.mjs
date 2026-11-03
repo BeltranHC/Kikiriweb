@@ -22,6 +22,8 @@ const promotionOperation = await readFile(resolve(root, 'supabase/operations/ass
 await writeFile(resolve(output, 'asignar_promocion.sql'), promotionMigration.replace(/COMMIT;\s*$/, '') + promotionOperation.replace(/BEGIN;/, ''), 'utf8');
 const distributionMode = await readFile(resolve(root, 'supabase/migrations/20261031_distribution_only_history.sql'), 'utf8');
 await writeFile(resolve(output, 'activar_solo_reparto.sql'), distributionMode, 'utf8');
+const recipientChanges = await readFile(resolve(root, 'supabase/migrations/20261103_recipient_ticket_changes.sql'), 'utf8');
+await writeFile(resolve(output, 'actualizar_participantes_y_tickets.sql'), recipientChanges, 'utf8');
 const literal = JSON.stringify(students).replace(/'/g, "''");
 const seed = `
 -- ARCHIVO PRIVADO: contiene el padrón proporcionado por la facultad.
@@ -47,7 +49,7 @@ END $faculty_seed$;
 SELECT coalesce(semester::text,'Sin semestre') AS semestre,count(*) AS estudiantes FROM public.students GROUP BY semester ORDER BY semester NULLS LAST;
 COMMIT;
 `;
-await writeFile(resolve(output, 'instalar_reparto_y_padron.sql'), migration + promotionMigration + seed + distributionMode, 'utf8');
+await writeFile(resolve(output, 'instalar_reparto_y_padron.sql'), migration + promotionMigration + seed + distributionMode + recipientChanges, 'utf8');
 const summary = { total: students.length, semesters: Object.fromEntries(SEMESTERS.map((label, i) => [label, students.filter(student => student.semester === i + 1).length])), schools: [...new Set(students.map(student => student.school))] };
 await writeFile(resolve(output, 'resumen.json'), JSON.stringify(summary, null, 2) + '\n', 'utf8');
 console.log(JSON.stringify(summary));

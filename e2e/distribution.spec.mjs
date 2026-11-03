@@ -4,10 +4,11 @@ const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const fold = value => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 async function fixture(page) {
   const state = { calls: [], students: [
-    { id:uuid(1),name:'PÉREZ JOSÉ',code:'00123',semester:2,school:'FINESI',roster_updated_at:'2026-10-31T12:00:00Z',tickets:[{id:uuid(91),ticket_number:1000}] },
+    { id:uuid(1),name:'PÉREZ JOSÉ',code:'00123',semester:2,school:'FINESI',roster_updated_at:'2026-10-31T12:00:00Z',tickets:[{id:uuid(91),ticket_number:1000,student_id:uuid(1),assignment_updated_at:'2026-11-03T10:00:00Z',can_edit:true}] },
     { id:uuid(2),name:'ALVAREZ ANA',code:'100002',semester:6,school:'FINESI',roster_updated_at:'2026-10-31T12:00:00Z',tickets:[] },
     { id:uuid(3),name:'TORRES LUIS',code:'100003',semester:10,school:'FINESI',roster_updated_at:'2026-10-31T12:00:00Z',tickets:[] },
   ] };
+  state.changes=[];
   state.assignments=[{id:uuid(501),student_id:uuid(1),student_name:'PÉREZ JOSÉ',student_code:'00123',semester:2,created_at:'2026-10-31T15:30:00Z',actor_id:uuid(999),actor_email:'reparto@example.test',ticket_numbers:[1000],current_student_name:'PÉREZ JOSÉ'}];
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -23,17 +24,33 @@ async function fixture(page) {
     const method = route.request().method();
     state.calls.push({ path:url.pathname,method,query:url.searchParams.get('q'),page:url.searchParams.get('page') });
     if (url.pathname === '/api/faculty' && method === 'GET') {
-      const query=fold(url.searchParams.get('q') || ''); const semester=url.searchParams.get('semester') || 'all';
-      const students=state.students.filter(student => query.split(/\s+/).every(token => fold(student.name+' '+student.code).includes(token)) && (semester==='all' || (student.semester ?? 0)===Number(semester)))
+      const query=fold(url.searchParams.get('q') || ''); const semester=url.searchParams.get('semester') || 'all'; const type=url.searchParams.get('type')||'all';
+      const students=state.students.filter(student => query.split(/\s+/).every(token => fold(student.name+' '+student.code).includes(token)) && (semester==='all' || (student.semester ?? 0)===Number(semester)) && (type==='all'||(student.recipient_type||'student')===type))
         .sort((a,b)=>(a.semester??12)-(b.semester??12) || a.name.localeCompare(b.name));
-      await route.fulfill({json:{students,total:students.length,hasMore:false,page:1,pageSize:30,semesters:[null,1,2,3,4,5,6,7,8,9,10,11].map(semester=>({semester,count:state.students.filter(s=>s.semester===semester).length})),summary:{totalStudents:state.students.length,withTickets:state.students.filter(s=>s.tickets.length).length,withoutTickets:state.students.filter(s=>!s.tickets.length).length}}});
+      await route.fulfill({json:{categories:['student','external','teacher'].map(type=>({type,count:state.students.filter(s=>(s.recipient_type||'student')===type).length})),students,total:students.length,hasMore:false,page:1,pageSize:30,semesters:[null,1,2,3,4,5,6,7,8,9,10,11].map(semester=>({semester,count:state.students.filter(s=>s.semester===semester).length})),summary:{totalStudents:state.students.length,withTickets:state.students.filter(s=>s.tickets.length).length,withoutTickets:state.students.filter(s=>!s.tickets.length).length}}});
     } else if (url.pathname === '/api/faculty' && ['POST','PATCH'].includes(method)) {
       const body=route.request().postDataJSON();
       let student=state.students.find(s=>s.id===body.id);
       if (method==='PATCH' && student.roster_updated_at!==body.expectedUpdatedAt) {await route.fulfill({status:409,json:{error:'Otro encargado modificó este estudiante'}});return;}
       if (method==='POST') {student={id:uuid(10+state.students.length),tickets:[]};state.students.push(student);}
-      Object.assign(student,{name:body.name,code:body.code,semester:body.semester,school:body.school,roster_updated_at:new Date().toISOString()});
+      const before=JSON.parse(JSON.stringify(student));
+      Object.assign(student,{recipient_type:body.recipientType||'student',name:body.name,code:body.code,semester:body.semester,school:body.school,roster_updated_at:new Date().toISOString()});
+      state.changes.unshift({id:uuid(700+state.changes.length),entity_type:'student',operation:method==='POST'?'create':'update',student_name:student.name,actor_email:'reparto@example.test',created_at:new Date().toISOString(),before_data:method==='POST'?null:before,after_data:JSON.parse(JSON.stringify(student))});
       await route.fulfill({status:method==='POST'?201:200,json:student});
+    } else if(url.pathname==='/api/faculty/tickets'&&method==='PATCH') {
+      const body=route.request().postDataJSON();const student=state.students.find(s=>s.id===body.studentId);const ticket=student?.tickets.find(t=>t.id===body.ticketId);
+      if(!ticket||ticket.assignment_updated_at!==body.expectedUpdatedAt) {await route.fulfill({status:409,json:{error:'Otro usuario modificó este ticket'}});return;}
+      if(body.action==='update'&&state.students.some(s=>s.tickets.some(t=>t.id!==ticket.id&&t.ticket_number===body.ticketNumber))) {await route.fulfill({status:409,json:{error:'El número ya está registrado'}});return;}
+      const before={...ticket,student_name:student.name};
+      if(body.action==='update')ticket.ticket_number=body.ticketNumber;
+      if(body.action==='release'||body.action==='transfer') {student.tickets=student.tickets.filter(t=>t.id!==ticket.id);ticket.student_id=body.action==='release'?null:body.destinationId;ticket.is_available=body.action==='release';if(body.action==='transfer')state.students.find(s=>s.id===body.destinationId).tickets.push(ticket);}
+      ticket.assignment_updated_at=new Date().toISOString();
+      const destination=state.students.find(s=>s.id===ticket.student_id);
+      state.changes.unshift({id:uuid(700+state.changes.length),entity_type:'ticket',operation:'update',student_name:destination?.name||student.name,actor_email:'reparto@example.test',created_at:new Date().toISOString(),before_data:before,after_data:{...ticket,student_name:destination?.name}});
+      await route.fulfill({json:{ticket,action:body.action,previousStudentId:student.id}});
+    } else if(url.pathname==='/api/faculty/changes') {
+      const query=fold(url.searchParams.get('q')||'');const matches=state.changes.filter(c=>fold(JSON.stringify(c)).includes(query));
+      await route.fulfill({json:{changes:matches,total:matches.length,hasMore:false,summary:{}}});
     } else if (url.pathname==='/api/faculty/assignments' && method==='GET') {
       const query=fold(url.searchParams.get('q')||'');const numeric=Number(query.replace(/^#/,''));const semester=url.searchParams.get('semester')||'all';
       const from=url.searchParams.get('from');const to=url.searchParams.get('to');
@@ -45,7 +62,7 @@ async function fixture(page) {
     } else if (url.pathname==='/api/faculty/assignments') {
       const body=route.request().postDataJSON();const student=state.students.find(s=>s.id===body.studentId);
       if (body.ticketNumbers.some(n=>state.students.some(s=>s.tickets.some(t=>t.ticket_number===n)))) {await route.fulfill({status:409,json:{error:'Estos tickets ya están registrados. No se asignó ningún ticket del lote.'}});return;}
-      const tickets=body.ticketNumbers.map(n=>({id:uuid(2000+n),ticket_number:n,student_id:student.id,is_picked_up:false,is_paid:false}));
+      const tickets=body.ticketNumbers.map(n=>({id:uuid(2000+n),ticket_number:n,student_id:student.id,is_picked_up:false,is_paid:false,can_edit:true,assignment_updated_at:new Date().toISOString()}));
       student.tickets.push(...tickets);
       state.assignments.push({id:uuid(501+state.assignments.length),student_id:student.id,student_name:student.name,student_code:student.code,semester:student.semester,created_at:new Date().toISOString(),actor_id:uuid(999),actor_email:'reparto@example.test',ticket_numbers:body.ticketNumbers});
       await route.fulfill({status:201,json:{ticketsCreated:tickets.length,tickets,studentId:student.id}});
@@ -243,4 +260,39 @@ test('The student editor has an accessible close action even on a short mobile v
   await close.click();await expect(dialog).not.toBeVisible();
   await page.getByRole('button',{name:'Nuevo estudiante',exact:true}).click();await dialog.getByRole('button',{name:'Cancelar',exact:true}).click();await expect(dialog).not.toBeVisible();
   expect(state.calls.filter(call=>call.method!=='GET')).toHaveLength(0);expect(state.students).toHaveLength(3);
+});
+
+
+test('External and teacher profiles can be created without student codes and filtered separately',async({page})=>{
+  const state=await fixture(page);await page.goto('/distribution');
+  for(const [type,label,name] of [['external','Externo','VISITANTE DEMO'],['teacher','Docente','DOCENTE DEMO']]) {
+    await page.getByRole('button',{name:'Nuevo estudiante',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Nuevo estudiante'});
+    await dialog.getByLabel('Tipo de participante').selectOption(type);await dialog.getByLabel('Nombre completo').fill(name);
+    await expect(dialog.getByLabel('Código o documento (opcional)')).not.toHaveAttribute('required');await expect(dialog.getByLabel('Semestre',{exact:true})).toHaveCount(0);
+    await dialog.getByRole('button',{name:'Guardar estudiante'}).click();await expect(dialog).not.toBeVisible();
+    await page.getByRole('group',{name:'Filtrar por semestre'}).getByRole('button',{name:new RegExp('^'+label+' ')}).click();await expect(page.getByRole('article')).toHaveCount(1);await expect(page.getByRole('article')).toContainText(name);
+  }
+  expect(state.students.filter(s=>s.recipient_type==='teacher'||s.recipient_type==='external').every(s=>s.code===null&&s.semester===null)).toBe(true);
+});
+
+test('Search stays above the assignment panel and a correction retains the original number and actor in history',async({page})=>{
+  await page.setViewportSize({width:390,height:844});const state=await fixture(page);await page.goto('/distribution');await choose(page);
+  expect(await page.evaluate(()=>document.querySelector('input[type="search"]').getBoundingClientRect().top<document.querySelector('aside').getBoundingClientRect().top)).toBe(true);
+  const assignment=page.getByRole('complementary',{name:'Asignar tickets al estudiante'});await assignment.locator('summary').filter({hasText:'Ver y editar'}).click();await assignment.getByRole('button',{name:'Editar ticket 1000',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Editar ticket #1000'});await dialog.getByLabel('Nuevo número de ticket').fill('1050');await dialog.getByRole('button',{name:'Guardar corrección'}).click();await expect(dialog).not.toBeVisible();
+  expect(state.students[0].tickets[0].ticket_number).toBe(1050);await expect(assignment.getByRole('button',{name:'Editar ticket 1050',exact:true})).toBeVisible();
+  await page.goto('/distribution/history');await page.getByRole('link',{name:'Cambios de fichas y tickets'}).click();await expect(page.getByRole('heading',{name:'Historial de cambios'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Historial',exact:true})).toHaveAttribute('aria-current','page');
+  const row=page.getByRole('row').filter({hasText:'reparto@example.test'});await expect(row).toContainText('1000');await expect(row).toContainText('1050');
+  const changeSearch=page.getByLabel('Buscar cambios por persona, ticket o usuario');await changeSearch.fill('1050');await expect(row).toHaveCount(1);await page.reload();await expect(changeSearch).toHaveValue('1050');await expect(row).toHaveCount(1);
+  await page.screenshot({path:'artifacts/ui-preview/ticket-correction-history-mobile.png',fullPage:true,animations:'disabled'});
+});
+
+test('Assigned tickets can be transferred and released without removing the original assignment snapshot',async({page})=>{
+  const state=await fixture(page);await page.goto('/distribution');await choose(page);const assignment=page.getByRole('complementary',{name:'Asignar tickets al estudiante'});
+  await assignment.locator('summary').filter({hasText:'Ver y editar'}).click();await assignment.getByRole('button',{name:'Editar ticket 1000'}).click();let dialog=page.getByRole('dialog',{name:'Editar ticket #1000'});
+  await dialog.getByLabel('Operación').selectOption('transfer');await dialog.getByLabel('Buscar nuevo destinatario').fill('100002');await dialog.getByRole('button',{name:/ALVAREZ ANA/}).click();await dialog.getByRole('button',{name:'Reasignar ticket',exact:true}).click();await expect(dialog).not.toBeVisible();
+  expect(state.students[0].tickets).toHaveLength(0);expect(state.students[1].tickets[0].ticket_number).toBe(1000);expect(state.assignments[0].ticket_numbers).toEqual([1000]);
+  await choose(page,'100002');await assignment.locator('summary').filter({hasText:'Ver y editar'}).click();await assignment.getByRole('button',{name:'Editar ticket 1000'}).click();dialog=page.getByRole('dialog',{name:'Editar ticket #1000'});
+  await dialog.getByLabel('Operación').selectOption('release');await dialog.getByRole('button',{name:'Retirar asignación',exact:true}).click();await expect(dialog).not.toBeVisible();expect(state.students[1].tickets).toHaveLength(0);expect(state.changes).toHaveLength(2);
 });

@@ -17,7 +17,7 @@ test('Faculty import rejects missing fields, duplicate codes, invalid semesters 
   for (const input of ['nombre,semestre\nDemo,II', 'codigo,nombre,semestre\n12,A,II\n12,B,III', 'codigo,nombre,semestre\n12,A,XI', 'codigo,nombre,semestre\n12,"A,II']) assert.throws(() => parseFacultyCSV(input));
 });
 test('Student editing validates identity and requires an optimistic update version', () => {
-  assert.deepEqual(facultyStudentInput({ name: '  Ana  Demo ', code: 'ab-012', semester: 'VI', school: ' FINESI ' }), { name: 'Ana Demo', code: 'AB-012', semester: 6, school: 'FINESI' });
+  assert.deepEqual(facultyStudentInput({ name: '  Ana  Demo ', code: 'ab-012', semester: 'VI', school: ' FINESI ' }), { name: 'Ana Demo', code: 'AB-012', semester: 6, school: 'FINESI', recipientType: 'student' });
   assert.equal(semesterNumber(''), null);
   assert.throws(() => facultyStudentInput({ name: 'Demo', code: '' }));
   assert.throws(() => facultyEditInput({ id, name: 'Demo', code: '00123' }));

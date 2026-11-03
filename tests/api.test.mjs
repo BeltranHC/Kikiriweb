@@ -17,10 +17,10 @@ async function compile(path, dependencies, exports) {
 }
 async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
-  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'] }[route];
+  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH'], 'faculty/changes': ['GET'] }[route];
   return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
 }
-for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'] })) {
+for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH'], 'faculty/changes': ['GET'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
     const client = { auth: { getUser: async () => ({ data: { user: null }, error: null }) }, from: () => assert.fail('Database must not be accessed') };
     const response = await (await handlers(route, client))[method]({ json: () => assert.fail('Body must not be read'), formData: () => assert.fail('File must not be read') });
@@ -151,7 +151,7 @@ test('Faculty API validates directory filters before calling PostgreSQL', async 
   assert.equal((await route.GET({url:'http://localhost/api/faculty?semester=12'})).status,400);
   assert.equal(calls.length,0);
   assert.equal((await route.GET({url:'http://localhost/api/faculty?q=Jose&semester=2&page=3'})).status,200);
-  assert.equal(calls[0].name,'faculty_directory'); assert.equal(calls[0].args.p_semester,2); assert.equal(calls[0].args.p_page,3);
+  assert.equal(calls[0].name,'faculty_recipient_directory'); assert.equal(calls[0].args.p_semester,2); assert.equal(calls[0].args.p_page,3);
   assert.equal((await route.GET({url:'http://localhost/api/faculty?semester=11'})).status,200);
   assert.equal(calls[1].args.p_semester,11);
 });
@@ -202,4 +202,12 @@ test('Assignment history remains available in distribution-only mode and forward
   assert.equal(calls[0].args.p_from,'2026-10-31T05:00:00.000Z');assert.equal(calls[0].args.p_until,'2026-11-01T05:00:00.000Z');assert.equal(calls[0].args.p_semester,11);
   assert.equal((await route.GET({url:'http://localhost/api/faculty/assignments?from=2026-11-02&to=2026-10-31'})).status,400);
   assert.equal(calls.length,1);
+});
+
+
+test('Ticket changes validate actions and pass only trusted IDs and concurrency tokens, never a claimed audit actor',async()=>{
+  const calls=[];const route=await handlers('faculty/tickets',authenticated(async(name,args)=>{calls.push({name,args});return {data:{ticket:{id:user.id}},error:null};}));
+  assert.equal((await route.PATCH({json:async()=>({action:'release',ticketId:user.id,studentId:user.id})})).status,400);
+  const payload={action:'update',ticketId:user.id,studentId:user.id,ticketNumber:1234,expectedUpdatedAt:'2026-11-03T10:00:00Z',actorId:'forged'};
+  assert.equal((await route.PATCH({json:async()=>payload})).status,200);assert.equal(calls[0].name,'edit_faculty_ticket');assert.equal(calls[0].args.p_ticket_number,1234);assert.equal('actorId' in calls[0].args,false);
 });

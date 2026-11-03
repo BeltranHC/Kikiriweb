@@ -6,11 +6,12 @@ import { Ticket, Users, UserPlus, Pencil, RefreshCw, Upload, CheckCircle, Search
 import SearchBar from '@/components/SearchBar';
 import Pagination from '@/components/Pagination';
 import StudentEditor from '@/components/StudentEditor';
+import TicketEditor from '@/components/TicketEditor';
 import FacultyImport from '@/components/FacultyImport';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useSearchState } from '@/hooks/useSearchState';
 import { useFacultyDirectory } from '@/hooks/useFacultyDirectory';
-import { SEMESTERS, semesterLabel, parseTicketNumbers, PROMOTION_SEMESTER } from '@/lib/faculty.mjs';
+import { SEMESTERS, parseTicketNumbers, PROMOTION_SEMESTER, RECIPIENT_TYPES, recipientLabel } from '@/lib/faculty.mjs';
 import { requestJson, jsonBody } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import styles from './page.module.css';
@@ -18,6 +19,8 @@ import styles from './page.module.css';
 export default function DistributionPage() {
   const { query, page, ready, setQuery, setPage } = useSearchState('distribution');
   const [semester, setSemester] = useState('all');
+  const [type, setType] = useState('all');
+  const [ticketEditor, setTicketEditor] = useState(null);
   const [selected, setSelected] = useState(null);
   const [assignmentClosed, setAssignmentClosed] = useState(false);
   const [editor, setEditor] = useState(null);
@@ -27,7 +30,7 @@ export default function DistributionPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [receipt, setReceipt] = useState(null);
-  const directory = useFacultyDirectory(query, page, semester, ready);
+  const directory = useFacultyDirectory(query, page, semester, ready, type);
   const toast = useToast();
   const assignmentPanel = useRef(null);
   const directoryPanel = useRef(null);
@@ -45,7 +48,12 @@ export default function DistributionPage() {
     if (saving || confirming) return;
     setAssignmentClosed(true); scrollToPanel(directoryPanel);
   };
-  const changeSemester = value => { setSemester(value); setPage(1); };
+  const changeSemester = value => { setSemester(value); setType(value === 'all' ? 'all' : 'student'); setPage(1); };
+  const changeType = value => { setType(value); setSemester('all'); setPage(1); };
+  const savedTicket = result => {
+    setSelected(previous => previous?.id === result.previousStudentId ? {...previous,tickets:previous.tickets.filter(ticket => ticket.id !== result.ticket.id).concat(result.ticket.student_id === previous.id ? [result.ticket] : []).sort((a,b)=>a.ticket_number-b.ticket_number)} : previous);
+    setReceipt(null); directory.refresh(); toast.success('Cambio de ticket registrado con tu usuario');
+  };
   const savedStudent = student => {
     setSelected(previous => !editor?.student || previous?.id === student.id ? { ...previous, ...student, tickets: previous?.id === student.id ? previous.tickets : [] } : previous);
     if (!editor?.student) { setNumberText(''); setSaveError(''); setReceipt(null); setAssignmentClosed(false); scrollToPanel(assignmentPanel); }
@@ -72,29 +80,32 @@ export default function DistributionPage() {
         <button type="button" className={`btn btn-primary ${styles.actionButton}`} onClick={() => setEditor({ student: null })} aria-label="Nuevo estudiante" title="Nuevo estudiante"><UserPlus size={20} aria-hidden="true" /><span className={styles.actionLabel}>Nuevo estudiante</span></button>
       </div>
     </header>
+    <section ref={directoryPanel} className={styles.directorySearch} aria-label="Buscar en el padrón">
+        <div className={styles.directoryHeading}><div><h2>Buscar en el padrón</h2><p>Usa Editar datos para corregir el nombre, código, semestre o escuela de un estudiante.</p></div><button type="button" className="btn btn-secondary btn-sm" disabled={directory.loading} onClick={directory.refresh} aria-label="Actualizar padrón"><RefreshCw size={16} /></button></div>
+        <SearchBar value={query} onSearch={setQuery} placeholder="Buscar por código, nombres o apellidos" />
+        <div className={styles.semesters} role="group" aria-label="Filtrar por semestre">
+          <button type="button" aria-pressed={semester === 'all' && type === 'all'} onClick={() => changeSemester('all')}>Todos <span>{directory.summary.totalStudents ?? 0}</span></button>
+          {SEMESTERS.map((label, index) => <button type="button" key={label} aria-pressed={semester === String(index + 1)} onClick={() => changeSemester(String(index + 1))}>{label} <span>{counts[index + 1] || 0}</span></button>)}
+          <button type="button" aria-pressed={semester === String(PROMOTION_SEMESTER)} onClick={() => changeSemester(String(PROMOTION_SEMESTER))}>Promoción <span>{counts[PROMOTION_SEMESTER] || 0}</span></button>
+          {['external','teacher'].map(value => <button type="button" key={value} aria-pressed={type === value} onClick={() => changeType(value)}>{RECIPIENT_TYPES[value]} <span>{directory.categories?.find(category => category.type === value)?.count || 0}</span></button>)}
+          <button type="button" aria-pressed={semester === '0'} onClick={() => changeSemester('0')}>Sin semestre <span>{counts[0] || 0}</span></button>
+        </div>
+    </section>
     <section className={styles.metrics} aria-label="Resumen del padrón">
-      <div><Users size={21} /><span>Estudiantes en padrón<strong>{directory.summary.totalStudents ?? '—'}</strong></span></div>
+      <div><Users size={21} /><span>Personas en padrón<strong>{directory.summary.totalStudents ?? '—'}</strong></span></div>
       <div><Ticket size={21} /><span>Con tickets asignados<strong>{directory.summary.withTickets ?? '—'}</strong></span></div>
       <div><UserPlus size={21} /><span>Sin tickets asignados<strong>{directory.summary.withoutTickets ?? '—'}</strong></span></div>
     </section>
     {importing && <FacultyImport onImported={directory.refresh} onClose={() => setImporting(false)} />}
     <div className={`${styles.workspace} ${assignmentClosed ? styles.workspaceClosed : ''}`}>
-      <section ref={directoryPanel} className={styles.directory} aria-label="Padrón por semestre">
-        <div className={styles.directoryHeading}><div><h2>Estudiantes de la facultad</h2><p>Usa Editar datos para corregir el nombre, código, semestre o escuela de un estudiante.</p></div><button type="button" className="btn btn-secondary btn-sm" disabled={directory.loading} onClick={directory.refresh} aria-label="Actualizar padrón"><RefreshCw size={16} /></button></div>
-        <SearchBar value={query} onSearch={setQuery} placeholder="Buscar por código, nombres o apellidos" />
-        <div className={styles.semesters} role="group" aria-label="Filtrar por semestre">
-          <button type="button" aria-pressed={semester === 'all'} onClick={() => changeSemester('all')}>Todos <span>{directory.summary.totalStudents ?? 0}</span></button>
-          {SEMESTERS.map((label, index) => <button type="button" key={label} aria-pressed={semester === String(index + 1)} onClick={() => changeSemester(String(index + 1))}>{label} <span>{counts[index + 1] || 0}</span></button>)}
-          <button type="button" aria-pressed={semester === String(PROMOTION_SEMESTER)} onClick={() => changeSemester(String(PROMOTION_SEMESTER))}>Promoción <span>{counts[PROMOTION_SEMESTER] || 0}</span></button>
-          <button type="button" aria-pressed={semester === '0'} onClick={() => changeSemester('0')}>Sin semestre <span>{counts[0] || 0}</span></button>
-        </div>
+      <section className={styles.directory} aria-label="Padrón por semestre">
         <p className={styles.resultCount} role="status">{directory.loading ? 'Buscando estudiantes...' : `${directory.total} estudiantes encontrados`}</p>
         {directory.error && <div role="alert" className={styles.error}><p>{directory.error}</p><button type="button" className="btn btn-secondary btn-sm" onClick={directory.refresh}>Reintentar</button></div>}
         {!directory.error && directory.students.length === 0 && !directory.loading && <div className="empty-state"><Search size={34} /><h3>No encontramos estudiantes</h3><p>Prueba otro nombre o código, cambia el semestre o agrega al estudiante.</p><button className="btn btn-primary" type="button" onClick={() => setEditor({ student: null })}>Agregar estudiante</button></div>}
         <div className={styles.students}>{directory.students.map((student, index) => {
           const previous = directory.students[index - 1];
-          const groupStart = index === 0 || previous.semester !== student.semester;
-          return <div key={student.id}>{groupStart && <h3 className={styles.groupHeading}>{semesterLabel(student.semester)}</h3>}
+          const groupStart = index === 0 || previous.semester !== student.semester || previous.recipient_type !== student.recipient_type;
+          return <div key={student.id}>{groupStart && <h3 className={styles.groupHeading}>{recipientLabel(student)}</h3>}
             <article className={`${styles.student} ${selected?.id === student.id ? styles.selected : ''}`} aria-label={`${student.name}, ${student.code || 'sin código'}`}>
               <div className={styles.studentInfo}><strong>{student.name}</strong><div><span className={styles.code}>{student.code || 'Sin código'}</span><span>{student.school || 'Escuela sin confirmar'}</span></div><p>{student.tickets?.length || 0} tickets asignados{student.tickets?.length > 0 && ` · ${student.tickets.slice(0, 5).map(ticket => `#${ticket.ticket_number}`).join(', ')}${student.tickets.length > 5 ? '…' : ''}`}</p></div>
               <div className={styles.studentActions}><button type="button" className="btn btn-secondary btn-sm" aria-label={`Editar a ${student.name}`} title="Editar nombre, código, semestre y escuela" onClick={() => setEditor({ student })} disabled={saving}><Pencil size={15} /><span>Editar datos</span></button><button type="button" className={`btn ${selected?.id === student.id ? 'btn-secondary' : 'btn-primary'} btn-sm`} onClick={() => choose(student)} disabled={saving || confirming}>{selected?.id === student.id ? (assignmentClosed ? 'Continuar asignación' : 'Seleccionado') : 'Asignar tickets'}</button></div>
@@ -106,8 +117,8 @@ export default function DistributionPage() {
       <aside ref={assignmentPanel} hidden={assignmentClosed} className={styles.assignment} aria-label="Asignar tickets al estudiante">
         <div className={styles.assignmentTitle}><span><Ticket size={21} aria-hidden="true" /></span><div><h2>Asignar tickets</h2><p>Registra la entrega del talonario</p></div><button type="button" className={`btn btn-secondary btn-sm ${styles.panelClose}`} onClick={closeAssignment} disabled={saving || confirming} aria-label="Cerrar asignación"><X size={17} aria-hidden="true" />Cerrar</button></div>
         {!selected ? <div className={styles.selectHint}><Users size={38} /><h3>Selecciona un estudiante</h3><p>Busca su código o nombre en el padrón y elige “Asignar tickets”.</p></div> : <>
-          <div className={styles.recipient}><span className={styles.eyebrow}>ESTUDIANTE SELECCIONADO</span><h3>{selected.name}</h3><p><strong>{selected.code || 'Sin código'}</strong> · {semesterLabel(selected.semester)}</p><button type="button" className={styles.editLink} onClick={() => setEditor({ student: selected })} disabled={saving}><Pencil size={13} />Editar datos del estudiante</button></div>
-          {(selected.tickets?.length || 0) > 0 && <details className={styles.existing}><summary>{selected.tickets.length} tickets ya asignados</summary><p>{selected.tickets.map(ticket => `#${ticket.ticket_number}`).join(', ')}</p></details>}
+          <div className={styles.recipient}><span className={styles.eyebrow}>PERSONA SELECCIONADA</span><h3>{selected.name}</h3><p><strong>{selected.code || 'Sin código'}</strong> · {recipientLabel(selected)}</p><button type="button" className={styles.editLink} onClick={() => setEditor({ student: selected })} disabled={saving}><Pencil size={13} />Editar datos del estudiante</button></div>
+          {(selected.tickets?.length || 0) > 0 && <details className={styles.existing}><summary>{selected.tickets.length} tickets asignados · Ver y editar</summary><ul className={styles.assignedTickets}>{selected.tickets.map(ticket => <li key={ticket.id}><span>#{ticket.ticket_number}</span><button type="button" className="btn btn-secondary btn-sm" aria-label={`Editar ticket ${ticket.ticket_number}`} disabled={!ticket.can_edit || saving} onClick={() => setTicketEditor({ticket,student:selected})}><Pencil size={14} aria-hidden="true" />Editar</button>{!ticket.can_edit && <small>{ticket.can_edit === false ? 'Protegido por pago o entrega' : 'Edición pendiente de activación'}</small>}</li>)}</ul></details>}
           <form className={styles.assignmentForm} onSubmit={event => { event.preventDefault(); if (parsed.numbers.length && !parsed.error) setConfirming(true); }} data-mutation-pending={saving ? 'true' : 'false'}>
             <div className="input-group"><label htmlFor="assignment-numbers">Números de ticket</label><textarea id="assignment-numbers" className="input-field" rows={3} maxLength={24000} value={numberText} onChange={event => { setNumberText(event.target.value); setSaveError(''); }} disabled={saving} placeholder="Ej.: 1050, 1052, 1060-1065" aria-describedby="assignment-help" /></div>
             <p id="assignment-help" className={styles.help}>Separa números con comas o espacios. Para números consecutivos, usa un rango como 1060-1065.</p>
@@ -121,6 +132,7 @@ export default function DistributionPage() {
         {receipt && <div role="status" className={styles.success}><CheckCircle size={21} /><div><strong>Asignación guardada</strong><p>{receipt.name}: {receipt.numbers.map(number => `#${number}`).join(', ')}</p></div></div>}
       </aside>
     </div>
+    <TicketEditor value={ticketEditor} onClose={() => setTicketEditor(null)} onSaved={savedTicket} />
     <StudentEditor open={!!editor} student={editor?.student} onClose={() => setEditor(null)} onSaved={savedStudent} />
     <ConfirmModal isOpen={confirming} title="Confirmar asignación" isDanger={false} confirmText="Confirmar y asignar" onConfirm={assign} onCancel={() => setConfirming(false)}
       message={`Asignar ${parsed.numbers.length} tickets a ${selected?.name || ''} (${selected?.code || 'sin código'}): ${parsed.numbers.slice(0, 20).join(', ')}${parsed.numbers.length > 20 ? '…' : ''}. Verifica que los números coincidan con los tickets físicos.`} />

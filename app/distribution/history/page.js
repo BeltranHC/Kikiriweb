@@ -7,7 +7,7 @@ import Pagination from '@/components/Pagination';
 import { useSearchState } from '@/hooks/useSearchState';
 import { useAssignmentHistory } from '@/hooks/useAssignmentHistory';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
-import { SEMESTERS,PROMOTION_SEMESTER,semesterLabel } from '@/lib/faculty.mjs';
+import { SEMESTERS,PROMOTION_SEMESTER,recipientLabel } from '@/lib/faculty.mjs';
 import { APP_TIME_ZONE } from '@/lib/domain.mjs';
 import { formatTicketNumber } from '@/lib/utils';
 import styles from './page.module.css';
@@ -23,6 +23,7 @@ export default function AssignmentHistoryPage() {
   return <div className={styles.page}>
     <header className={styles.header}><div><Link className={styles.back} href="/distribution"><ArrowLeft size={15} />Volver a Reparto</Link><h1>Historial de asignaciones</h1><p>Quién recibió cada lote de tickets y qué encargado lo registró.</p></div>
       <button type="button" className="btn btn-secondary" onClick={()=>history.refresh()} disabled={history.refreshing}><RefreshCw size={16} />{history.refreshing?'Actualizando...':'Actualizar historial'}</button></header>
+    <nav className={styles.tabs} aria-label="Tipo de historial"><Link href="/distribution/history" aria-current="page">Asignaciones</Link><Link href="/distribution/changes">Cambios de fichas y tickets</Link></nav>
     <section className={styles.summary} aria-label="Resumen de asignaciones">
       {[['Asignaciones',history.summary.assignments,History],['Tickets registrados',history.summary.tickets,Ticket],['Estudiantes',history.summary.students,Users]].map(([label,value,Icon])=><div key={label}><Icon size={21} /><span>{label}<strong>{value??'—'}</strong></span></div>)}
     </section>
@@ -37,7 +38,7 @@ export default function AssignmentHistoryPage() {
     {history.error&&<div role="alert" className={styles.error}>{history.error}<button type="button" className="btn btn-secondary btn-sm" onClick={()=>history.refresh()}>Reintentar</button></div>}
     {history.assignments.length>0?<div className={styles.tableWrap} aria-busy={history.loading}><table className={styles.table}><thead><tr><th>Asignación</th><th>Estudiante</th><th>Tickets asignados</th><th>Fecha y hora</th><th>Encargado</th></tr></thead><tbody>{history.assignments.map(item=><tr key={item.id}>
       <td data-label="Asignación"><strong className={styles.reference} title={item.id}>ASG-{item.id.slice(0,8)}</strong><span className={styles.badge}>{item.ticket_numbers.length} {item.ticket_numbers.length===1?'ticket':'tickets'}</span></td>
-      <td data-label="Estudiante"><strong>{item.student_name}</strong><p className={styles.code}>{item.student_code||'Sin código registrado'}</p><span className={styles.group}>{semesterLabel(item.semester)}</span>{item.current_student_name&&item.current_student_name!==item.student_name&&<p className={styles.current}>Perfil actual: {item.current_student_name}</p>}</td>
+      <td data-label="Estudiante"><strong>{item.student_name}</strong><p className={styles.code}>{item.student_code||'Sin código registrado'}</p><span className={styles.group}>{recipientLabel(item)}</span>{item.current_student_name&&item.current_student_name!==item.student_name&&<p className={styles.current}>Perfil actual: {item.current_student_name}</p>}</td>
       <td data-label="Tickets asignados"><div className={styles.tickets}>{item.ticket_numbers.slice(0,12).map(number=><span key={number}>#{formatTicketNumber(number)}</span>)}</div>{item.ticket_numbers.length>12&&<details className={styles.allTickets}><summary>Ver los {item.ticket_numbers.length} tickets</summary><p>{item.ticket_numbers.map(number=>`#${formatTicketNumber(number)}`).join(', ')}</p></details>}</td>
       <td data-label="Fecha y hora"><time dateTime={item.created_at}>{dateTime.format(new Date(item.created_at))}</time></td>
       <td data-label="Encargado"><span className={styles.actor}>{item.actor_email||`Cuenta ${item.actor_id?.slice(0,8)||'sin correo'}`}</span><span className={styles.recorded}>Asignación registrada</span></td>

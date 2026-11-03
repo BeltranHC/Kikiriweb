@@ -162,3 +162,16 @@ Para crear las cuentas, configura `SUPABASE_SECRET_KEY` en `.env.local` (tambié
 El script revisa todas las cuentas existentes antes de crear ninguna. No reemplaza cuentas ajenas ni cambia contraseñas existentes. Un identificador de lote permite reanudar si falla la segunda creación o la escritura del estado. `estado_cuentas.json` registra cuáles se crearon y sus IDs, sin contraseñas. Las claves administrativas solo se usan en este comando local; no se añaden al navegador ni a una API pública.
 
 En cada ficha del padrón de Reparto, **Editar datos** abre el formulario de nombre, código, semestre y escuela. También está disponible en el panel del estudiante seleccionado. Guardar conserva los tickets asociados.
+
+
+### Participantes y cambios de tickets (3 de noviembre)
+
+Ejecuta `supabase/migrations/20261103_recipient_ticket_changes.sql` en SQL Editor despues de las migraciones anteriores. La copia local `artifacts/faculty-roster/actualizar_participantes_y_tickets.sql` contiene la misma migracion. El deploy de la aplicacion no ejecuta SQL; la clave administrativa de Auth tampoco permite aplicar migraciones. El padron conserva la consulta anterior si todavia falta el nuevo RPC, y las nuevas escrituras esperan la activacion de la base.
+
+El tipo de participante es independiente del semestre: Estudiante, Externo o Docente. Los externos y docentes admiten codigo vacio y no reciben semestre. Los perfiles anteriores permanecen como estudiantes, con su semestre o Promocion intactos. El buscador y los filtros aparecen antes de las metricas y del panel de asignacion tambien en movil.
+
+En **Tickets asignados / Ver y editar**, cada ticket permite corregir su numero, reasignarlo buscando otra persona o retirarlo. La correccion conserva el ID. El retiro deja `is_available = true`, sin propietario y sin borrar el ticket; puede asignarse nuevamente con su numero y conserva el mismo ID. Reasignar genera una constancia para el nuevo destinatario. Los lotes originales permanecen intactos. Los tickets pagados, entregados o con cualquier movimiento de entrega, incluidas anulaciones, estan protegidos. Cada operacion bloquea las filas y comprueba la version para rechazar formularios desactualizados; una colision cancela toda la operacion.
+
+Los triggers de `students` y `tickets` guardan cada alta, modificacion o eliminacion en `faculty_changes`, incluidos los cambios de una importacion. Registran usuario y correo de la sesion, fecha, valores anteriores y posteriores. No aceptan un actor enviado por el navegador. Datos y auditoria se confirman en la misma transaccion: si falla el registro del cambio, se cancela la escritura. Los operadores solo pueden leer esta tabla. Las acciones administrativas sin una sesion de usuario se muestran como Sistema / SQL. No se inventan autores para los cambios anteriores a esta activacion.
+
+**Historial / Cambios de fichas y tickets** permite consultar estos registros por persona, numero anterior o nuevo y usuario, con fechas de Lima y paginacion. Antes de reactivar el modulo de entregas, sus consultas deberan excluir los tickets disponibles sin asignacion.

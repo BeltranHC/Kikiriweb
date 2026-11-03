@@ -37,3 +37,8 @@
 .error { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px; border-radius: 9px; background: var(--danger-bg); color: var(--danger); font-size: .84rem; }
 .footnote { color: var(--text-tertiary); font-size: .74rem; }
 @media(max-width:700px) { .summary { gap: 8px; } .summary > div { padding: 12px 10px; } .summary svg { display: none; } .summary span { font-size: .66rem; } .summary strong { font-size: 1.5rem; } .tableWrap { border: 0; background: transparent; } .table,.table tbody,.table tr,.table td { display: block; min-width: 0!important; max-width: none!important; } .table thead { display: none; } .table tr { padding: 15px; border: 1px solid var(--border-color); border-radius: 13px; background: var(--bg-secondary); margin-bottom: 13px; } .table td { padding: 10px 0; border-top: 0; } .table td::before { content: attr(data-label); display: block; color: var(--text-tertiary); font-size: .68rem; margin-bottom: 5px; } .filters { padding: 15px; } }
+
+.tabs { display: flex; gap: 10px; flex-wrap: wrap; }
+.tabs a { border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px; font-size: .85rem; min-height: 44px; }
+.tabs a[aria-current="page"] { color: var(--primary); background: var(--primary-glow); }
+.changeValues { display: grid; gap: 6px; font-size: .8rem; overflow-wrap: anywhere; }

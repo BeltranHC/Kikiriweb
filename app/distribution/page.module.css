@@ -72,3 +72,10 @@
 @media (max-width: 640px) { .metrics { gap: 8px; } .metrics > div { padding: 12px 9px; gap: 8px; align-items: flex-start; } .metrics svg { display: none; } .metrics span { font-size: .65rem; } .metrics strong { font-size: 1.45rem; } .student { flex-wrap: wrap; padding: 14px; } .studentActions { width: 100%; justify-content: flex-end; flex-wrap: wrap; } .assignment, .importPanel { padding: 18px; } .actions { width: 100%; } .actions .actionButton { flex: 0 0 48px; width: 48px; height: 48px; padding: 0; } .actionButton svg { width: 22px; height: 22px; } .actionLabel { display: none; } }
 
 .assignment { scroll-margin-top: 88px; }
+
+.directorySearch { min-width: 0; scroll-margin-top: 88px; }
+.assignedTickets { list-style: none; display: grid; gap: 8px; margin-top: 12px; }
+.assignedTickets li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.assignedTickets small { flex-basis: 100%; color: var(--text-tertiary); }
+.recipientOptions { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
+.recipientOptions button { white-space: normal; text-align: left; justify-content: flex-start; min-height: 44px; }

@@ -12,6 +12,7 @@ import styles from './Navbar.module.css';
 
 export default function Navbar() {
   const pathname = usePathname();
+  const isActive = href => pathname === href || (href === '/distribution/history' && pathname === '/distribution/changes');
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
   const [theme, setTheme] = useState('light');
@@ -73,8 +74,8 @@ export default function Navbar() {
         <span className={styles.brandIcon}><Bird size={23} /></span>
         <span className={styles.brandText}>KikiriWeb<span className={styles.brandSubtitle}>{DISTRIBUTION_ONLY ? 'Reparto de tickets' : 'Control de entregas'}</span></span>
       </Link>
-      <div className={styles.navLinks}>{navItems.map(({ href, label, icon: Icon, locked }) => <Link key={href} href={href} aria-current={pathname === href ? 'page' : undefined}
-        title={locked ? 'Temporalmente inhabilitado' : undefined} className={`${styles.navLink} ${locked ? styles.locked : ''} ${pathname === href ? styles.navLinkActive : ''}`}><Icon size={17} /><span>{label}{locked && <small className={styles.lockedLabel}>Temporalmente inhabilitado</small>}</span></Link>)}</div>
+      <div className={styles.navLinks}>{navItems.map(({ href, label, icon: Icon, locked }) => <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}
+        title={locked ? 'Temporalmente inhabilitado' : undefined} className={`${styles.navLink} ${locked ? styles.locked : ''} ${isActive(href) ? styles.navLinkActive : ''}`}><Icon size={17} /><span>{label}{locked && <small className={styles.lockedLabel}>Temporalmente inhabilitado</small>}</span></Link>)}</div>
       <div className={styles.navActions}>
         <button
           type="button"
@@ -91,6 +92,6 @@ export default function Navbar() {
       </div>
     </div>
   </nav>
-    <nav className={styles.mobileNav} aria-label="Navegación móvil">{navItems.map(({ href, label, icon: Icon, locked }) => <Link key={href} href={href} aria-current={pathname === href ? 'page' : undefined}
-      title={locked ? 'Temporalmente inhabilitado' : undefined} className={`${styles.mobileLink} ${locked ? styles.locked : ''} ${pathname === href ? styles.mobileLinkActive : ''}`}><Icon size={21} /><span className={styles.mobileLabel}>{label}</span></Link>)}</nav></>;
+    <nav className={styles.mobileNav} aria-label="Navegación móvil">{navItems.map(({ href, label, icon: Icon, locked }) => <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}
+      title={locked ? 'Temporalmente inhabilitado' : undefined} className={`${styles.mobileLink} ${locked ? styles.locked : ''} ${isActive(href) ? styles.mobileLinkActive : ''}`}><Icon size={21} /><span className={styles.mobileLabel}>{label}</span></Link>)}</nav></>;
 }
