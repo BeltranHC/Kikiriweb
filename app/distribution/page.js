@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
-import { Ticket, Users, UserPlus, Pencil, RefreshCw, Upload, CheckCircle, Search, History, X } from 'lucide-react';
+import { Ticket, Users, UserPlus, Pencil, RefreshCw, Upload, CheckCircle, Search, History, X, Download } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
 import Pagination from '@/components/Pagination';
 import StudentEditor from '@/components/StudentEditor';
@@ -12,7 +12,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import { useSearchState } from '@/hooks/useSearchState';
 import { useFacultyDirectory } from '@/hooks/useFacultyDirectory';
 import { SEMESTERS, parseTicketNumbers, PROMOTION_SEMESTER, RECIPIENT_TYPES, recipientLabel } from '@/lib/faculty.mjs';
-import { requestJson, jsonBody } from '@/lib/client';
+import { request, requestJson, jsonBody } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import styles from './page.module.css';
 
@@ -25,6 +25,7 @@ export default function DistributionPage() {
   const [assignmentClosed, setAssignmentClosed] = useState(false);
   const [editor, setEditor] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [numberText, setNumberText] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,11 +73,25 @@ export default function DistributionPage() {
     } catch (error) { setSaveError(error.message); setConfirming(false); }
     finally { setSaving(false); }
   };
+  const exportParticipants = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const response = await request('/api/faculty/export');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url; link.download = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || 'participantes_tickets.csv';
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { toast.error(error.message); }
+    finally { setExporting(false); }
+  };
   return <div className={styles.page}>
     <header className={styles.header}><div><span className={styles.eyebrow}>FACULTAD · PADRÓN Y ASIGNACIONES</span><h1>Reparto de tickets</h1><p>Busca al estudiante, confirma sus datos y registra los tickets que recibe.</p></div>
       <div className={styles.actions} role="group" aria-label="Acciones del padrón">
         <Link className={`btn btn-secondary ${styles.actionButton}`} href="/distribution/history" aria-label="Historial de asignaciones" title="Historial de asignaciones"><History size={20} aria-hidden="true" /><span className={styles.actionLabel}>Historial de asignaciones</span></Link>
         <button type="button" className={`btn btn-secondary ${styles.actionButton}`} onClick={() => setImporting(true)} aria-label="Importar padrón" title="Importar padrón" aria-expanded={importing} aria-controls="faculty-import-panel"><Upload size={20} aria-hidden="true" /><span className={styles.actionLabel}>Importar padrón</span></button>
+        <button type="button" className={`btn btn-secondary ${styles.actionButton}`} onClick={exportParticipants} disabled={exporting} aria-busy={exporting} aria-label="Exportar participantes CSV" title="Descargar todos los participantes y sus tickets asignados"><Download size={20} aria-hidden="true" /><span className={styles.actionLabel}>{exporting ? 'Exportando...' : 'Exportar CSV'}</span></button>
         <button type="button" className={`btn btn-primary ${styles.actionButton}`} onClick={() => setEditor({ student: null })} aria-label="Nuevo estudiante" title="Nuevo estudiante"><UserPlus size={20} aria-hidden="true" /><span className={styles.actionLabel}>Nuevo estudiante</span></button>
       </div>
     </header>

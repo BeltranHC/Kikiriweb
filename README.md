@@ -175,3 +175,10 @@ En **Tickets asignados / Ver y editar**, cada ticket permite corregir su numero,
 Los triggers de `students` y `tickets` guardan cada alta, modificacion o eliminacion en `faculty_changes`, incluidos los cambios de una importacion. Registran usuario y correo de la sesion, fecha, valores anteriores y posteriores. No aceptan un actor enviado por el navegador. Datos y auditoria se confirman en la misma transaccion: si falla el registro del cambio, se cancela la escritura. Los operadores solo pueden leer esta tabla. Las acciones administrativas sin una sesion de usuario se muestran como Sistema / SQL. No se inventan autores para los cambios anteriores a esta activacion.
 
 **Historial / Cambios de fichas y tickets** permite consultar estos registros por persona, numero anterior o nuevo y usuario, con fechas de Lima y paginacion. Antes de reactivar el modulo de entregas, sus consultas deberan excluir los tickets disponibles sin asignacion.
+
+
+### Exportar participantes y tickets
+
+En Reparto, **Exportar CSV** descarga todo el padron actual, independientemente de la busqueda, filtros o pagina visibles. En movil se muestra el icono de descarga. El archivo tiene una fila por participante, incluidos estudiantes, Promocion, externos, docentes y quienes no tienen tickets. Incluye ID, nombre, codigo, DNI, categoria, semestre, escuela, cantidad y numeros de tickets asignados, fecha de modificacion de la ficha en Lima y el usuario de esa modificacion.
+
+La exportacion refleja la asignacion actual: un ticket retirado no figura en su anterior propietario; uno reasignado figura con su destinatario actual. Los tickets disponibles sin propietario no se incluyen. Las asignaciones anteriores y el historial siguen consultandose en la aplicacion. Se leen ambas tablas por paginas completas, sin limitarse a la pantalla ni truncar los tickets de una persona. Un error interrumpe la descarga en vez de generar un archivo parcial. El CSV usa UTF-8 con BOM, comillas y proteccion contra formulas de hojas de calculo. La ruta requiere sesion autorizada, no guarda cache publica y no necesita otra migracion.

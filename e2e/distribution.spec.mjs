@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { participantReport } from '../lib/faculty-export.mjs';
+import { parseCSV } from '../lib/csv.mjs';
 
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const fold = value => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -23,6 +26,10 @@ async function fixture(page) {
     if (!url.pathname.startsWith('/api/')) { await route.continue(); return; }
     const method = route.request().method();
     state.calls.push({ path:url.pathname,method,query:url.searchParams.get('q'),page:url.searchParams.get('page') });
+    if(url.pathname==='/api/faculty/export') {
+      await route.fulfill({headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="participantes_tickets_2026-11-03.csv"'},body:participantReport(state.students,state.students.flatMap(person=>person.tickets.map(ticket=>({...ticket,student_id:person.id}))))});
+      return;
+    }
     if (url.pathname === '/api/faculty' && method === 'GET') {
       const query=fold(url.searchParams.get('q') || ''); const semester=url.searchParams.get('semester') || 'all'; const type=url.searchParams.get('type')||'all';
       const students=state.students.filter(student => query.split(/\s+/).every(token => fold(student.name+' '+student.code).includes(token)) && (semester==='all' || (student.semester ?? 0)===Number(semester)) && (type==='all'||(student.recipient_type||'student')===type))
@@ -295,4 +302,20 @@ test('Assigned tickets can be transferred and released without removing the orig
   expect(state.students[0].tickets).toHaveLength(0);expect(state.students[1].tickets[0].ticket_number).toBe(1000);expect(state.assignments[0].ticket_numbers).toEqual([1000]);
   await choose(page,'100002');await assignment.locator('summary').filter({hasText:'Ver y editar'}).click();await assignment.getByRole('button',{name:'Editar ticket 1000'}).click();dialog=page.getByRole('dialog',{name:'Editar ticket #1000'});
   await dialog.getByLabel('Operación').selectOption('release');await dialog.getByRole('button',{name:'Retirar asignación',exact:true}).click();await expect(dialog).not.toBeVisible();expect(state.students[1].tickets).toHaveLength(0);expect(state.changes).toHaveLength(2);
+});
+
+
+test('Mobile CSV download exports all participants independently of filters and keeps the assignment draft',async({page})=>{
+  await page.setViewportSize({width:360,height:800});const state=await fixture(page);
+  state.students.push({id:uuid(80),name:'VISITANTE CSV',recipient_type:'external',code:null,semester:null,tickets:[{id:uuid(81),ticket_number:2050}]});
+  state.students.push({id:uuid(82),name:'DOCENTE SIN TICKETS',recipient_type:'teacher',code:null,semester:null,tickets:[]});
+  await page.goto('/distribution');await choose(page);await page.getByLabel('Números de ticket').fill('1060-1062');
+  await page.getByRole('group',{name:'Filtrar por semestre'}).getByRole('button',{name:/^VI /}).click();
+  const button=page.getByRole('button',{name:'Exportar participantes CSV'});await expect(button.locator('svg')).toBeVisible();
+  const downloadPromise=page.waitForEvent('download');await button.click();const download=await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^participantes_tickets_.*\.csv$/);
+  const rows=parseCSV(await readFile(await download.path(),'utf8'));expect(rows).toHaveLength(5);
+  expect(rows.find(row=>row.codigo==='00123').tickets_asignados).toBe('1000');expect(rows.find(row=>row.nombre==='VISITANTE CSV').tickets_asignados).toBe('2050');expect(rows.find(row=>row.nombre==='DOCENTE SIN TICKETS').cantidad_tickets).toBe('0');
+  await expect(search(page)).toHaveValue('00123');await expect(page.getByLabel('Números de ticket')).toHaveValue('1060-1062');await expect(button).toBeEnabled();
+  expect(state.calls.filter(call=>call.method!=='GET')).toHaveLength(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

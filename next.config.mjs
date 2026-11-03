@@ -6,6 +6,7 @@ const nextConfig = {
   distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   outputFileTracingRoot: path.dirname(fileURLToPath(import.meta.url)),
   allowedDevOrigins: [
+    '192.168.1.182',
     '10.90.125.6',
     '127.0.0.1',
     'localhost',

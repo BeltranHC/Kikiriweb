@@ -7,6 +7,7 @@ import * as csv from '../lib/csv.mjs';
 import { fetchAll } from '../lib/pagination.mjs';
 import { cashReport } from '../lib/report.mjs';
 import * as faculty from '../lib/faculty.mjs';
+import * as facultyExport from '../lib/faculty-export.mjs';
 import * as assignmentHistory from '../lib/assignment-history.mjs';
 import { requireDeliveryEnabled } from '../lib/module-mode.mjs';
 
@@ -17,10 +18,10 @@ async function compile(path, dependencies, exports) {
 }
 async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
-  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH'], 'faculty/changes': ['GET'] }[route];
-  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
+  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
+  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
 }
-for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH'], 'faculty/changes': ['GET'] })) {
+for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
     const client = { auth: { getUser: async () => ({ data: { user: null }, error: null }) }, from: () => assert.fail('Database must not be accessed') };
     const response = await (await handlers(route, client))[method]({ json: () => assert.fail('Body must not be read'), formData: () => assert.fail('File must not be read') });
@@ -210,4 +211,14 @@ test('Ticket changes validate actions and pass only trusted IDs and concurrency 
   assert.equal((await route.PATCH({json:async()=>({action:'release',ticketId:user.id,studentId:user.id})})).status,400);
   const payload={action:'update',ticketId:user.id,studentId:user.id,ticketNumber:1234,expectedUpdatedAt:'2026-11-03T10:00:00Z',actorId:'forged'};
   assert.equal((await route.PATCH({json:async()=>payload})).status,200);assert.equal(calls[0].name,'edit_faculty_ticket');assert.equal(calls[0].args.p_ticket_number,1234);assert.equal('actorId' in calls[0].args,false);
+});
+
+
+test('The complete participant CSV is available in distribution mode, ignores screen filters and is never publicly cached',async()=>{
+  const people=[{id:user.id,name:'Exported Student',code:'00123',semester:2},{id:'22222222-2222-4222-8222-222222222222',name:'Teacher Without Tickets',recipient_type:'teacher'}];
+  const client={...authenticated(),from(table){return {select(){return this;},not(){return this;},eq(){return this;},order(){return this;},async range(start,end){return {data:(table==='students'?people:[{id:'ticket',student_id:user.id,ticket_number:1050}]).slice(start,end+1),error:null};}};}};
+  const response=await (await handlers('faculty/export',client,{deliveryEnabled:false})).GET({url:'http://localhost/api/faculty/export?q=absent&semester=10'});
+  assert.equal(response.status,200);assert.match(response.headers.get('Content-Type'),/text\/csv/);assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+  assert.match(response.headers.get('Content-Disposition'),/attachment; filename="participantes_tickets_\d{4}-\d{2}-\d{2}\.csv"/);
+  const rows=csv.parseCSV(await response.text());assert.equal(rows.length,2);assert.equal(rows[0].codigo,'00123');assert.equal(rows[0].tickets_asignados,'1050');assert.equal(rows[1].cantidad_tickets,'0');
 });
