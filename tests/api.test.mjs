@@ -18,10 +18,10 @@ async function compile(path, dependencies, exports) {
 }
 async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
-  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
+  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
   return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
 }
-for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
+for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
     const client = { auth: { getUser: async () => ({ data: { user: null }, error: null }) }, from: () => assert.fail('Database must not be accessed') };
     const response = await (await handlers(route, client))[method]({ json: () => assert.fail('Body must not be read'), formData: () => assert.fail('File must not be read') });
@@ -207,7 +207,7 @@ test('Assignment API rejects duplicate numbers and forwards a single atomic batc
   assert.equal((await route.POST({json:async()=>({studentId:user.id,ticketNumbers:[1050,1050]})})).status,400);
   assert.equal(calls.length,0);
   assert.equal((await route.POST({json:async()=>({studentId:user.id,ticketNumbers:[1051,1050]})})).status,201);
-  assert.equal(calls.length,1);assert.equal(calls[0].name,'assign_student_tickets');assert.deepEqual(calls[0].args.p_ticket_numbers,[1050,1051]);
+  assert.equal(calls.length,1);assert.equal(calls[0].name,'assign_faculty_tickets');assert.deepEqual(calls[0].args.p_ticket_numbers,[1050,1051]);
 });
 
 
@@ -239,9 +239,29 @@ test('Ticket changes validate actions and pass only trusted IDs and concurrency 
 
 test('The complete participant CSV is available in distribution mode, ignores screen filters and is never publicly cached',async()=>{
   const people=[{id:user.id,name:'Exported Student',code:'00123',semester:2},{id:'22222222-2222-4222-8222-222222222222',name:'Teacher Without Tickets',recipient_type:'teacher'}];
-  const client={...authenticated(),from(table){return {select(){return this;},not(){return this;},eq(){return this;},order(){return this;},async range(start,end){return {data:(table==='students'?people:[{id:'ticket',student_id:user.id,ticket_number:1050}]).slice(start,end+1),error:null};}};}};
+  const client={...authenticated(),from(table){return {select(){return this;},not(){return this;},is(){return this;},eq(){return this;},order(){return this;},async range(start,end){return {data:(table==='students'?people:[{id:'ticket',student_id:user.id,ticket_number:1050}]).slice(start,end+1),error:null};}};}};
   const response=await (await handlers('faculty/export',client,{deliveryEnabled:false})).GET({url:'http://localhost/api/faculty/export?q=absent&semester=10'});
   assert.equal(response.status,200);assert.match(response.headers.get('Content-Type'),/text\/csv/);assert.equal(response.headers.get('Cache-Control'),'private, no-store');
   assert.match(response.headers.get('Content-Disposition'),/attachment; filename="participantes_tickets_\d{4}-\d{2}-\d{2}\.csv"/);
   const rows=csv.parseCSV(await response.text());assert.equal(rows.length,2);assert.equal(rows[0].codigo,'00123');assert.equal(rows[0].tickets_asignados,'1050');assert.equal(rows[1].cantidad_tickets,'0');
+});
+
+
+test('Payments validate methods and versions and never forward a claimed amount or actor',async()=>{
+  const calls=[];const route=await handlers('faculty/payments',authenticated(async(name,args)=>{calls.push({name,args});return {data:{amount:15},error:null};}));
+  const payload={ticketId:user.id,studentId:user.id,expectedUpdatedAt:'2026-11-05T12:00:00Z',action:'pay',method:'yape',amount:1,actorId:'forged'};
+  assert.equal((await route.PATCH({json:async()=>({...payload,method:'card'})})).status,400);assert.equal(calls.length,0);
+  assert.equal((await route.PATCH({json:async()=>payload})).status,200);assert.equal(calls[0].name,'set_faculty_ticket_payment');assert.equal(calls[0].args.p_method,'yape');assert.equal('amount' in calls[0].args,false);assert.equal('actorId' in calls[0].args,false);
+  assert.equal((await route.PATCH({json:async()=>({...payload,action:'void'})})).status,200);assert.equal(calls[1].args.p_method,null);
+});
+test('Paid assignment is submitted as one transaction and malformed payment methods do not reach the database',async()=>{
+  const calls=[];const route=await handlers('faculty/assignments',authenticated(async(name,args)=>{calls.push({name,args});return {data:{},error:null};}));
+  assert.equal((await route.POST({json:async()=>({studentId:user.id,ticketNumbers:[8000],paymentMethod:'cash'})})).status,201);assert.equal(calls[0].args.p_payment_method,'cash');
+  assert.equal((await route.POST({json:async()=>({studentId:user.id,ticketNumbers:[8001],paymentMethod:'card'})})).status,400);assert.equal(calls.length,1);
+});
+test('Participant deletion requires an exact ticket-version snapshot and propagates paid-ticket conflicts',async()=>{
+  const calls=[];const route=await handlers('faculty',authenticated(async(name,args)=>{calls.push({name,args});return {error:{code:'P0001',message:'Anula primero los pagos'}};}));
+  const payload={id:user.id,expectedUpdatedAt:'2026-11-05T12:00:00Z',expectedTickets:[{id:user.id,updated_at:'2026-11-05T12:00:00Z'}]};
+  assert.equal((await route.DELETE({json:async()=>({...payload,expectedTickets:undefined})})).status,400);assert.equal(calls.length,0);
+  assert.equal((await route.DELETE({json:async()=>payload})).status,409);assert.equal(calls[0].name,'delete_faculty_recipient');assert.deepEqual(calls[0].args.p_expected_tickets,payload.expectedTickets);
 });

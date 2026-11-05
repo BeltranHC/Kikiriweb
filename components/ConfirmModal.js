@@ -3,7 +3,7 @@
 import { AlertTriangle, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
-export default function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Aceptar', cancelText = 'Cancelar', isDanger = true }) {
+export default function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Aceptar', cancelText = 'Cancelar', isDanger = true, error = '', confirmDisabled = false }) {
   const dialog = useRef(null);
   const titleId = useId();
   const messageId = useId();
@@ -26,10 +26,10 @@ export default function ConfirmModal({ isOpen, title, message, onConfirm, onCanc
       <AlertTriangle size={28} aria-hidden="true" />
       <button type="button" onClick={onCancel} disabled={busy} aria-label="Cerrar diálogo"><X size={20} /></button>
     </div>
-    <h2 id={titleId}>{title}</h2><p id={messageId}>{message}</p>
+    <h2 id={titleId}>{title}</h2><p id={messageId}>{message}</p>{error && <p role="alert" className="text-danger">{error}</p>}
     <div className="confirm-actions">
       <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>{cancelText}</button>
-      <button type="button" className={`btn ${isDanger ? 'btn-danger' : 'btn-primary'}`} onClick={confirm} disabled={busy}>{busy ? 'Procesando...' : confirmText}</button>
+      <button type="button" className={`btn ${isDanger ? 'btn-danger' : 'btn-primary'}`} onClick={confirm} disabled={busy || confirmDisabled}>{busy ? 'Procesando...' : confirmText}</button>
     </div>
   </dialog>;
 }

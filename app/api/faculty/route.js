@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireSession, apiError, HttpError } from '@/lib/api';
 import { ValidationError } from '@/lib/validation.mjs';
-import { facultyStudentInput, facultyEditInput, PROMOTION_SEMESTER, recipientType } from '@/lib/faculty.mjs';
+import { facultyStudentInput, facultyEditInput, PROMOTION_SEMESTER, recipientType, facultyDeleteInput } from '@/lib/faculty.mjs';
 
 export const dynamic = 'force-dynamic';
 export async function GET(request) {
@@ -56,3 +56,13 @@ async function save(request, edit) {
 }
 export const POST = request => save(request, false);
 export const PATCH = request => save(request, true);
+
+export async function DELETE(request) {
+  try {
+    const { supabase } = await requireSession();
+    const input = facultyDeleteInput(await request.json());
+    const { data, error } = await supabase.rpc('delete_faculty_recipient', { p_student_id: input.id, p_expected_updated_at: input.expectedUpdatedAt, p_expected_tickets: input.expectedTickets });
+    if (error) throw error;
+    return NextResponse.json(data);
+  } catch (error) { return apiError(error); }
+}

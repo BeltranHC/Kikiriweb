@@ -11,7 +11,7 @@ async function fixture(page) {
     { id:uuid(2),name:'ALVAREZ ANA',code:'100002',semester:6,school:'FINESI',roster_updated_at:'2026-10-31T12:00:00Z',tickets:[] },
     { id:uuid(3),name:'TORRES LUIS',code:'100003',semester:10,school:'FINESI',roster_updated_at:'2026-10-31T12:00:00Z',tickets:[] },
   ] };
-  state.changes=[];
+  state.changes=[];state.payments=[];state.deletedStudents=[];state.deletedTickets=[];
   state.assignments=[{id:uuid(501),student_id:uuid(1),student_name:'PÉREZ JOSÉ',student_code:'00123',semester:2,created_at:'2026-10-31T15:30:00Z',actor_id:uuid(999),actor_email:'reparto@example.test',ticket_numbers:[1000],current_student_name:'PÉREZ JOSÉ'}];
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -35,6 +35,13 @@ async function fixture(page) {
       const students=state.students.filter(student => query.split(/\s+/).every(token => fold(student.name+' '+student.code).includes(token)) && (semester==='all' || (student.semester ?? 0)===Number(semester)) && (type==='all'||(student.recipient_type||'student')===type) && (ticketStatus==='all'||(ticketStatus==='without'?student.tickets.length===0:student.tickets.length>0)))
         .sort((a,b)=>(a.semester??12)-(b.semester??12) || a.name.localeCompare(b.name));
       await route.fulfill({json:{categories:['student','external','teacher'].map(type=>({type,count:state.students.filter(s=>(s.recipient_type||'student')===type).length,withTickets:state.students.filter(s=>(s.recipient_type||'student')===type&&s.tickets.length>0).length})),students,total:students.length,hasMore:false,page:1,pageSize:30,semesters:[null,1,2,3,4,5,6,7,8,9,10,11].map(semester=>({semester,count:state.students.filter(s=>(s.recipient_type||'student')==='student'&&s.semester===semester).length,withTickets:state.students.filter(s=>(s.recipient_type||'student')==='student'&&s.semester===semester&&s.tickets.length>0).length})),summary:{totalAssignedTickets:state.students.reduce((total,person)=>total+person.tickets.length,0),totalStudents:state.students.length,withTickets:state.students.filter(s=>s.tickets.length).length,withoutTickets:state.students.filter(s=>!s.tickets.length).length}}});
+    } else if (url.pathname === '/api/faculty' && method==='DELETE') {
+      const body=route.request().postDataJSON();const person=state.students.find(student=>student.id===body.id);
+      if(!person||person.roster_updated_at!==body.expectedUpdatedAt||person.tickets.some(ticket=>ticket.is_paid)||body.expectedTickets.length!==person.tickets.length||person.tickets.some(ticket=>!body.expectedTickets.some(expected=>expected.id===ticket.id&&expected.updated_at===ticket.assignment_updated_at))) {await route.fulfill({status:409,json:{error:'Anula los pagos y actualiza las asignaciones antes de eliminar'}});return;}
+      const timestamp=new Date().toISOString();const before=JSON.parse(JSON.stringify(person));
+      for(const ticket of person.tickets){state.deletedTickets.push({...ticket,student_id:null,deleted_at:timestamp,is_available:!ticket.is_picked_up});state.changes.unshift({id:uuid(700+state.changes.length),entity_type:'ticket',operation:'delete',student_name:person.name,actor_email:'reparto@example.test',created_at:timestamp,before_data:{...ticket,student_name:person.name},after_data:{deleted_at:timestamp}});}
+      state.deletedStudents.push({...before,deleted_at:timestamp});state.students=state.students.filter(student=>student.id!==person.id);state.changes.unshift({id:uuid(700+state.changes.length),entity_type:'student',operation:'delete',student_name:person.name,actor_email:'reparto@example.test',created_at:timestamp,before_data:before,after_data:{...before,deleted_at:timestamp}});
+      await route.fulfill({json:{studentId:person.id,ticketsRemoved:person.tickets.length}});
     } else if (url.pathname === '/api/faculty' && ['POST','PATCH'].includes(method)) {
       const body=route.request().postDataJSON();
       let student=state.students.find(s=>s.id===body.id);
@@ -44,6 +51,18 @@ async function fixture(page) {
       Object.assign(student,{recipient_type:body.recipientType||'student',name:body.name,code:body.code,semester:body.semester,school:body.school,roster_updated_at:new Date().toISOString()});
       state.changes.unshift({id:uuid(700+state.changes.length),entity_type:'student',operation:method==='POST'?'create':'update',student_name:student.name,actor_email:'reparto@example.test',created_at:new Date().toISOString(),before_data:method==='POST'?null:before,after_data:JSON.parse(JSON.stringify(student))});
       await route.fulfill({status:method==='POST'?201:200,json:student});
+    } else if(url.pathname==='/api/faculty/payments'&&method==='PATCH') {
+      const body=route.request().postDataJSON();const person=state.students.find(student=>student.id===body.studentId);const ticket=person?.tickets.find(item=>item.id===body.ticketId);
+      if(!ticket||ticket.assignment_updated_at!==body.expectedUpdatedAt||(body.action==='pay'?ticket.is_paid:!ticket.is_paid)){await route.fulfill({status:409,json:{error:'El pago cambio. Actualiza el padron'}});return;}
+      const before={...ticket,student_name:person.name};const timestamp=new Date().toISOString();const paid=body.action==='pay';
+      Object.assign(ticket,{is_paid:paid,payment_method:paid?(body.method==='cash'?'en_momento_efectivo':'en_momento_yape')+'|reparto@example.test':null,paid_amount:paid?15:null,paid_at:paid?timestamp:null,paid_by_email:paid?'reparto@example.test':null,unit_price:15,can_manage:true,can_edit:!paid&&!ticket.is_picked_up,assignment_updated_at:timestamp});
+      state.payments.push({kind:paid?'payment':'void',amount:15,method:body.method,actor_email:'reparto@example.test',ticket_id:ticket.id});state.changes.unshift({id:uuid(700+state.changes.length),entity_type:'ticket',operation:'update',student_name:person.name,actor_email:'reparto@example.test',created_at:timestamp,before_data:before,after_data:{...ticket,student_name:person.name}});
+      await route.fulfill({json:{ticket,action:body.action,previousStudentId:person.id,amount:15}});
+    } else if(url.pathname==='/api/faculty/tickets'&&method==='DELETE') {
+      const body=route.request().postDataJSON();const person=state.students.find(student=>student.id===body.studentId);const ticket=person?.tickets.find(item=>item.id===body.ticketId);
+      if(!ticket||ticket.is_paid||ticket.assignment_updated_at!==body.expectedUpdatedAt){await route.fulfill({status:409,json:{error:'Anula primero el pago o actualiza el ticket'}});return;}
+      const before={...ticket,student_name:person.name};const timestamp=new Date().toISOString();person.tickets=person.tickets.filter(item=>item.id!==ticket.id);Object.assign(ticket,{student_id:null,deleted_at:timestamp,is_available:!ticket.is_picked_up,can_manage:false,can_edit:false,assignment_updated_at:timestamp});state.deletedTickets.push({...ticket});state.changes.unshift({id:uuid(700+state.changes.length),entity_type:'ticket',operation:'delete',student_name:person.name,actor_email:'reparto@example.test',created_at:timestamp,before_data:before,after_data:{...ticket}});
+      await route.fulfill({json:{ticket,action:'delete',previousStudentId:person.id}});
     } else if(url.pathname==='/api/faculty/tickets'&&method==='PATCH') {
       const body=route.request().postDataJSON();const student=state.students.find(s=>s.id===body.studentId);const ticket=student?.tickets.find(t=>t.id===body.ticketId);
       if(!ticket||ticket.assignment_updated_at!==body.expectedUpdatedAt) {await route.fulfill({status:409,json:{error:'Otro usuario modificó este ticket'}});return;}
@@ -69,10 +88,12 @@ async function fixture(page) {
     } else if (url.pathname==='/api/faculty/assignments') {
       const body=route.request().postDataJSON();const student=state.students.find(s=>s.id===body.studentId);
       if (body.ticketNumbers.some(n=>state.students.some(s=>s.tickets.some(t=>t.ticket_number===n)))) {await route.fulfill({status:409,json:{error:'Estos tickets ya están registrados. No se asignó ningún ticket del lote.'}});return;}
-      const tickets=body.ticketNumbers.map(n=>({id:uuid(2000+n),ticket_number:n,student_id:student.id,is_picked_up:false,is_paid:false,can_edit:true,assignment_updated_at:new Date().toISOString()}));
+      const paid=['cash','yape'].includes(body.paymentMethod);const timestamp=new Date().toISOString();
+      const tickets=body.ticketNumbers.map(n=>({id:uuid(2000+n),ticket_number:n,student_id:student.id,is_picked_up:false,is_paid:paid,can_edit:!paid,can_manage:true,unit_price:15,paid_amount:paid?15:null,paid_at:paid?timestamp:null,payment_method:paid?(body.paymentMethod==='cash'?'en_momento_efectivo':'en_momento_yape')+'|reparto@example.test':null,assignment_updated_at:timestamp}));
+      for(const ticket of tickets)if(paid){state.payments.push({kind:'payment',method:body.paymentMethod,amount:15,actor_email:'reparto@example.test',ticket_id:ticket.id});state.changes.unshift({id:uuid(700+state.changes.length),entity_type:'ticket',operation:'update',student_name:student.name,actor_email:'reparto@example.test',created_at:timestamp,before_data:{is_paid:false},after_data:{...ticket,student_name:student.name}});}
       student.tickets.push(...tickets);
       state.assignments.push({id:uuid(501+state.assignments.length),student_id:student.id,student_name:student.name,student_code:student.code,semester:student.semester,created_at:new Date().toISOString(),actor_id:uuid(999),actor_email:'reparto@example.test',ticket_numbers:body.ticketNumbers});
-      await route.fulfill({status:201,json:{ticketsCreated:tickets.length,tickets,studentId:student.id}});
+      await route.fulfill({status:201,json:{ticketsCreated:tickets.length,tickets,studentId:student.id,paymentMethod:paid?body.paymentMethod:null,paymentTotal:paid?tickets.length*15:0}});
     } else if (url.pathname==='/api/faculty/import') {
       await route.fulfill({json:{studentsCreated:2,studentsExisting:1,total:3}});
     } else await route.fulfill({status:404,json:{error:'Unknown fixture API'}});
@@ -407,4 +428,30 @@ test('Mobile search results sit immediately below the search box, before filters
   await page.setViewportSize({width:1440,height:1000});await expect(page.getByRole('article')).toHaveCount(1);await expect(page.getByLabel('N\u00fameros de ticket')).toHaveValue('1400-1402');
   await page.setViewportSize({width:390,height:844});await search(page).fill('');await expect(page.getByRole('article')).toHaveCount(3);await expect(page.getByLabel('N\u00fameros de ticket')).toHaveValue('1400-1402');
   expect(state.calls.filter(call=>call.method!=='GET')).toHaveLength(0);
+});
+
+
+for(const [method,label]of [['cash','Pag\u00f3 en efectivo'],['yape','Pag\u00f3 con Yape']])test(`Tickets can be paid during allocation using ${method} without marking pickup`,async({page})=>{
+ const state=await fixture(page);await page.setViewportSize({width:390,height:844});await page.goto('/distribution');await choose(page,'100002');await page.getByLabel('N\u00fameros de ticket').fill('1600-1601');await page.getByRole('radio',{name:label}).check();await page.getByRole('button',{name:'Asignar 2 tickets',exact:true}).click();await page.getByRole('button',{name:'Confirmar y asignar'}).click();
+ const assignment=page.getByRole('complementary',{name:'Asignar tickets al estudiante'});await expect(assignment).toContainText('Pago registrado:');await expect(assignment).toContainText('S/ 30.00');expect(state.students[1].tickets).toHaveLength(2);expect(state.students[1].tickets.every(ticket=>ticket.is_paid&&!ticket.is_picked_up)).toBe(true);expect(state.payments).toHaveLength(2);expect(state.payments.every(event=>event.method===method)).toBe(true);await expect(page.getByRole('radio',{name:'Pendiente de pago',exact:true})).toBeChecked();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('Existing payments can be registered and voided before deletion, and historical assignments remain intact',async({page})=>{
+ const state=await fixture(page);await page.goto('/distribution');await choose(page);const assignment=page.getByRole('complementary',{name:'Asignar tickets al estudiante'});await assignment.locator('summary').click();await assignment.getByRole('button',{name:'Editar ticket 1000',exact:true}).click();let editor=page.getByRole('dialog',{name:'Editar ticket #1000'});
+ await editor.getByLabel('Operaci\u00f3n').selectOption('pay');await editor.getByLabel('Medio de pago').selectOption('yape');await editor.getByRole('button',{name:'Registrar pago',exact:true}).click();await expect(editor).not.toBeVisible();await expect(assignment).toContainText('Pagado: Yape');
+ await assignment.getByRole('button',{name:'Eliminar participante',exact:true}).click();const blocked=page.getByRole('dialog',{name:'Eliminar participante'});await expect(blocked).toContainText('Anula esos pagos');await expect(blocked.getByRole('button',{name:'Eliminar participante',exact:true})).toBeDisabled();await blocked.getByRole('button',{name:'Cancelar',exact:true}).click();
+ await assignment.getByRole('button',{name:'Editar ticket 1000',exact:true}).click();editor=page.getByRole('dialog',{name:'Editar ticket #1000'});await expect(editor.locator('option[value="delete"]')).toBeDisabled();await editor.getByLabel('Operaci\u00f3n').selectOption('void');await editor.getByRole('button',{name:'Anular pago',exact:true}).click();expect(state.students[0].tickets[0].is_paid).toBe(true);await editor.getByRole('button',{name:'Confirmar anulaci\u00f3n',exact:true}).click();await expect(editor).not.toBeVisible();expect(state.payments).toHaveLength(2);expect(state.students[0].tickets[0].is_paid).toBe(false);
+ await assignment.getByRole('button',{name:'Editar ticket 1000',exact:true}).click();await editor.getByLabel('Operaci\u00f3n').selectOption('delete');await editor.getByRole('button',{name:'Eliminar ticket',exact:true}).click();expect(state.students[0].tickets).toHaveLength(1);await editor.getByRole('button',{name:'Confirmar eliminaci\u00f3n',exact:true}).click();await expect(editor).not.toBeVisible();expect(state.students[0].tickets).toHaveLength(0);expect(state.deletedTickets).toHaveLength(1);expect(state.assignments[0].ticket_numbers).toEqual([1000]);
+ await page.goto('/distribution/changes');await expect(page.getByRole('table')).toContainText('Eliminaci\u00f3n');await expect(page.getByRole('table')).toContainText('reparto@example.test');
+});
+
+test('Participant deletion confirms the affected assignments and updates totals while preserving the original history',async({page})=>{
+ const state=await fixture(page);await page.setViewportSize({width:390,height:844});await page.goto('/distribution');await choose(page);await page.getByLabel('N\u00fameros de ticket').fill('1800-1802');await page.getByRole('article').getByRole('button',{name:/^Eliminar a/}).click();const dialog=page.getByRole('dialog',{name:'Eliminar participante'});await expect(dialog).toContainText('1 ticket asignado');await dialog.getByRole('button',{name:'Cancelar',exact:true}).click();await expect(page.getByLabel('N\u00fameros de ticket')).toHaveValue('1800-1802');expect(state.calls.some(call=>call.method==='DELETE')).toBe(false);
+ await page.getByRole('article').getByRole('button',{name:/^Eliminar a/}).click();await dialog.getByRole('button',{name:'Eliminar participante',exact:true}).click();await expect(dialog).not.toBeVisible();await expect(page.getByRole('heading',{name:'No encontramos estudiantes'})).toBeVisible();await expect(page.getByRole('region',{name:'Resumen del padr\u00f3n'})).toContainText('Total de participantes2');expect(state.students).toHaveLength(2);expect(state.deletedStudents).toHaveLength(1);expect(state.deletedTickets).toHaveLength(1);expect(state.assignments[0].ticket_numbers).toEqual([1000]);
+ await page.goto('/distribution/history');await expect(page.getByRole('table')).toContainText('1000');await expect(page.getByRole('table')).toContainText('reparto@example.test');
+});
+
+
+test('External participants without codes can be deleted using the same operator controls',async({page})=>{
+ const state=await fixture(page);state.students.push({id:uuid(920),name:'VISITANTE A ELIMINAR',code:null,recipient_type:'external',semester:null,tickets:[],roster_updated_at:'2026-11-05T12:00:00Z'});await page.goto('/distribution');await search(page).fill('VISITANTE A ELIMINAR');await expect(page.getByRole('article')).toHaveCount(1);await page.getByRole('article').getByRole('button',{name:/^Eliminar a/}).click();const dialog=page.getByRole('dialog',{name:'Eliminar participante'});await expect(dialog).toContainText('Sin c\u00f3digo - Externo');await dialog.getByRole('button',{name:'Eliminar participante',exact:true}).click();await expect(dialog).not.toBeVisible();await expect(page.getByRole('heading',{name:'No encontramos estudiantes'})).toBeVisible();expect(state.students).toHaveLength(3);expect(state.deletedStudents[0].recipient_type).toBe('external');
 });

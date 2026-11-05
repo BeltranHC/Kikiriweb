@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
-import { Ticket, Users, UserPlus, Pencil, RefreshCw, Upload, CheckCircle, History, X, Download } from 'lucide-react';
+import { Ticket, Users, UserPlus, Pencil, RefreshCw, Upload, CheckCircle, History, X, Download, Trash2 } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
 import DirectoryResults from '@/components/DirectoryResults';
 import StudentEditor from '@/components/StudentEditor';
@@ -12,7 +12,8 @@ import DirectoryFilters from '@/components/DirectoryFilters';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useSearchState } from '@/hooks/useSearchState';
 import { useFacultyDirectory } from '@/hooks/useFacultyDirectory';
-import { parseTicketNumbers, recipientLabel } from '@/lib/faculty.mjs';
+import { parseTicketNumbers, recipientLabel, FACULTY_PAYMENT_LABELS } from '@/lib/faculty.mjs';
+import { parsePayment } from '@/lib/domain.mjs';
 import { request, requestJson, jsonBody } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import styles from './page.module.css';
@@ -29,6 +30,9 @@ export default function DistributionPage() {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [numberText, setNumberText] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('pending');
+  const [deletingStudent, setDeletingStudent] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -43,7 +47,7 @@ export default function DistributionPage() {
   };
   const choose = student => {
     if (saving || confirming) return;
-    if (selected?.id !== student.id) { setNumberText(''); setSaveError(''); setReceipt(null); }
+    if (selected?.id !== student.id) { setNumberText(''); setPaymentMethod('pending'); setSaveError(''); setReceipt(null); }
     setSelected(student); setAssignmentClosed(false); scrollToPanel(assignmentPanel);
   };
   const closeAssignment = () => {
@@ -58,22 +62,22 @@ export default function DistributionPage() {
   const hasFilters = !!query || semester !== 'all' || type !== 'all' || ticketStatus !== 'all';
   const savedTicket = result => {
     setSelected(previous => previous?.id === result.previousStudentId ? {...previous,tickets:previous.tickets.filter(ticket => ticket.id !== result.ticket.id).concat(result.ticket.student_id === previous.id ? [result.ticket] : []).sort((a,b)=>a.ticket_number-b.ticket_number)} : previous);
-    setReceipt(null); directory.refresh(); toast.success('Cambio de ticket registrado con tu usuario');
+    setReceipt(null); directory.refresh(); toast.success(({pay:'Pago registrado',void:'Pago anulado',delete:'Ticket eliminado'})[result.action] || 'Cambio de ticket registrado con tu usuario');
   };
   const savedStudent = student => {
     setSelected(previous => !editor?.student || previous?.id === student.id ? { ...previous, ...student, tickets: previous?.id === student.id ? previous.tickets : [] } : previous);
-    if (!editor?.student) { setNumberText(''); setSaveError(''); setReceipt(null); setAssignmentClosed(false); scrollToPanel(assignmentPanel); }
+    if (!editor?.student) { setNumberText(''); setPaymentMethod('pending'); setSaveError(''); setReceipt(null); setAssignmentClosed(false); scrollToPanel(assignmentPanel); }
     toast.success('Datos del estudiante guardados'); directory.refresh();
   };
   const assign = async () => {
     if (saving || !selected || !parsed.numbers.length) return;
     setSaving(true); setSaveError('');
     try {
-      const result = await requestJson('/api/faculty/assignments', jsonBody('POST', { studentId: selected.id, ticketNumbers: parsed.numbers }));
+      const result = await requestJson('/api/faculty/assignments', jsonBody('POST', { studentId: selected.id, ticketNumbers: parsed.numbers, paymentMethod }));
       const recipient = selected;
       setSelected(previous => previous?.id === recipient.id ? { ...previous, tickets: [...(previous.tickets || []), ...result.tickets].sort((a, b) => a.ticket_number - b.ticket_number) } : previous);
-      setReceipt({ name: recipient.name, numbers: result.tickets.map(ticket => ticket.ticket_number) });
-      setNumberText(''); setConfirming(false); directory.refresh();
+      setReceipt({ name: recipient.name, numbers: result.tickets.map(ticket => ticket.ticket_number), paymentMethod: result.paymentMethod, paymentTotal: result.paymentTotal });
+      setNumberText(''); setPaymentMethod('pending'); setConfirming(false); directory.refresh();
       toast.success(`${result.ticketsCreated} tickets asignados`);
     } catch (error) { setSaveError(error.message); setConfirming(false); }
     finally { setSaving(false); }
@@ -91,8 +95,21 @@ export default function DistributionPage() {
     } catch (error) { toast.error(error.message); }
     finally { setExporting(false); }
   };
+  const requestDelete = student => { setDeleteError(''); setDeletingStudent(student); };
+  const deleteStudent = async () => {
+    if (!deletingStudent) return;
+    try {
+      const result = await requestJson('/api/faculty', jsonBody('DELETE', { id: deletingStudent.id, expectedUpdatedAt: deletingStudent.roster_updated_at,
+        expectedTickets: (deletingStudent.tickets || []).map(ticket => ({ id: ticket.id, updated_at: ticket.assignment_updated_at })) }));
+      if (selected?.id === deletingStudent.id) { setSelected(null); setNumberText(''); setPaymentMethod('pending'); setReceipt(null); setSaveError(''); setAssignmentClosed(true); }
+      setDeletingStudent(null); directory.refresh(); toast.success(`Participante eliminado. ${result.ticketsRemoved} tickets retirados.`);
+    } catch (error) { setDeleteError(error.message); }
+  };
+  const deletePaidCount = deletingStudent?.tickets?.filter(ticket => ticket.is_paid).length || 0;
+  const deleteTicketCount = deletingStudent?.tickets?.length || 0;
+  const deletionName = deletingStudent ? `${deletingStudent.name} (${deletingStudent.code || 'Sin código'} - ${recipientLabel(deletingStudent)})` : '';
   const resultProps = { directory, page, onPageChange: setPage, selected, assignmentClosed, saving, confirming,
-    onEdit: student => setEditor({ student }), onChoose: choose };
+    onEdit: student => setEditor({ student }), onChoose: choose, onDelete: requestDelete };
   return <div className={styles.page}>
     <header className={styles.header}><div><span className={styles.eyebrow}>FACULTAD · PADRÓN Y ASIGNACIONES</span><h1>Reparto de tickets</h1><p>Busca al estudiante, confirma sus datos y registra los tickets que recibe.</p></div>
       <div className={styles.actions} role="group" aria-label="Acciones del padrón">
@@ -120,11 +137,14 @@ export default function DistributionPage() {
       <aside ref={assignmentPanel} hidden={assignmentClosed} className={styles.assignment} aria-label="Asignar tickets al estudiante">
         <div className={styles.assignmentTitle}><span><Ticket size={21} aria-hidden="true" /></span><div><h2>Asignar tickets</h2><p>Registra la entrega del talonario</p></div><button type="button" className={`btn btn-secondary btn-sm ${styles.panelClose}`} onClick={closeAssignment} disabled={saving || confirming} aria-label="Cerrar asignación"><X size={17} aria-hidden="true" />Cerrar</button></div>
         {!selected ? <div className={styles.selectHint}><Users size={38} /><h3>Selecciona un estudiante</h3><p>Busca su código o nombre en el padrón y elige “Asignar tickets”.</p></div> : <>
-          <div className={styles.recipient}><span className={styles.eyebrow}>PERSONA SELECCIONADA</span><h3>{selected.name}</h3><p><strong>{selected.code || 'Sin código'}</strong> · {recipientLabel(selected)}</p><button type="button" className={styles.editLink} onClick={() => setEditor({ student: selected })} disabled={saving}><Pencil size={13} />Editar datos del estudiante</button></div>
-          {(selected.tickets?.length || 0) > 0 && <details className={styles.existing}><summary>{selected.tickets.length} tickets asignados · Ver y editar</summary><ul className={styles.assignedTickets}>{selected.tickets.map(ticket => <li key={ticket.id}><span>#{ticket.ticket_number}</span><button type="button" className="btn btn-secondary btn-sm" aria-label={`Editar ticket ${ticket.ticket_number}`} disabled={!ticket.can_edit || saving} onClick={() => setTicketEditor({ticket,student:selected})}><Pencil size={14} aria-hidden="true" />Editar</button>{!ticket.can_edit && <small>{ticket.can_edit === false ? 'Protegido por pago o entrega' : 'Edición pendiente de activación'}</small>}</li>)}</ul></details>}
+          <div className={styles.recipient}><span className={styles.eyebrow}>PERSONA SELECCIONADA</span><h3>{selected.name}</h3><p><strong>{selected.code || 'Sin código'}</strong> · {recipientLabel(selected)}</p><button type="button" className={styles.editLink} onClick={() => setEditor({ student: selected })} disabled={saving}><Pencil size={13} />Editar datos del estudiante</button><button type="button" className={`${styles.editLink} ${styles.deleteLink}`} onClick={() => requestDelete(selected)} disabled={saving}><Trash2 size={13} />Eliminar participante</button></div>
+          {(selected.tickets?.length || 0) > 0 && <details className={styles.existing}><summary>{selected.tickets.length} tickets asignados · Ver y editar</summary><ul className={styles.assignedTickets}>{selected.tickets.map(ticket => <li key={ticket.id}><span>#{ticket.ticket_number}</span><span className={ticket.is_paid ? styles.paymentSummary : styles.help}>{ticket.is_paid ? `Pagado: ${parsePayment(ticket.payment_method).label}` : 'Pendiente de pago'}</span><button type="button" className="btn btn-secondary btn-sm" aria-label={`Editar ticket ${ticket.ticket_number}`} disabled={(!ticket.can_edit && !ticket.can_manage) || saving} onClick={() => setTicketEditor({ticket,student:selected})}><Pencil size={14} aria-hidden="true" />Editar</button>{!ticket.can_edit && !ticket.can_manage && <small>{ticket.can_edit === false ? 'Protegido por pago o entrega' : 'Edición pendiente de activación'}</small>}</li>)}</ul></details>}
           <form className={styles.assignmentForm} onSubmit={event => { event.preventDefault(); if (parsed.numbers.length && !parsed.error) setConfirming(true); }} data-mutation-pending={saving ? 'true' : 'false'}>
             <div className="input-group"><label htmlFor="assignment-numbers">Números de ticket</label><textarea id="assignment-numbers" className="input-field" rows={3} maxLength={24000} value={numberText} onChange={event => { setNumberText(event.target.value); setSaveError(''); }} disabled={saving} placeholder="Ej.: 1050, 1052, 1060-1065" aria-describedby="assignment-help" /></div>
             <p id="assignment-help" className={styles.help}>Separa números con comas o espacios. Para números consecutivos, usa un rango como 1060-1065.</p>
+            <fieldset className={styles.paymentChoices} disabled={saving}><legend>Pago de estos tickets</legend><div>
+              {[['pending','Pendiente de pago'],['cash','Pagó en efectivo'],['yape','Pagó con Yape']].map(([value,label]) => <label key={value}><input type="radio" name="assignment-payment" value={value} checked={paymentMethod === value} onChange={() => setPaymentMethod(value)} />{label}</label>)}
+            </div><p className={styles.help}>Se aplica a todos los tickets de este lote. Para un pago parcial, registra los tickets pagados en un lote aparte.</p></fieldset>
             {parsed.error && <p role="alert" className="text-danger">{parsed.error}</p>}
             {parsed.numbers.length > 0 && <div className={styles.numberPreview}><strong>{parsed.numbers.length} {parsed.numbers.length === 1 ? 'ticket por asignar' : 'tickets por asignar'}</strong><p>{parsed.numbers.slice(0, 12).map(number => `#${number}`).join(', ')}{parsed.numbers.length > 12 ? '…' : ''}</p>{parsed.numbers.length > 12 && <details><summary>Ver todos los números</summary><p>{parsed.numbers.join(', ')}</p></details>}</div>}
             {saveError && <p role="alert" className={styles.error}>{saveError}</p>}
@@ -132,12 +152,14 @@ export default function DistributionPage() {
             <p className={styles.help}>El reparto registra quién recibe cada ticket. El módulo de entregas está temporalmente inhabilitado.</p>
           </form>
         </>}
-        {receipt && <div role="status" className={styles.success}><CheckCircle size={21} /><div><strong>Asignación guardada</strong><p>{receipt.name}: {receipt.numbers.map(number => `#${number}`).join(', ')}</p></div></div>}
+        {receipt && <div role="status" className={styles.success}><CheckCircle size={21} /><div><strong>Asignación guardada</strong><p>{receipt.name}: {receipt.numbers.map(number => `#${number}`).join(', ')}</p>{receipt.paymentMethod && <p>Pago registrado: {FACULTY_PAYMENT_LABELS[receipt.paymentMethod]} · S/ {Number(receipt.paymentTotal).toFixed(2)}</p>}</div></div>}
       </aside>
     </div>
+    <ConfirmModal isOpen={!!deletingStudent} title="Eliminar participante" confirmText="Eliminar participante" confirmDisabled={deletePaidCount > 0} error={deleteError}
+      onConfirm={deleteStudent} onCancel={() => setDeletingStudent(null)} message={deletePaidCount > 0 ? `${deletionName} tiene ${deletePaidCount} ${deletePaidCount === 1 ? 'ticket pagado' : 'tickets pagados'}. Anula esos pagos antes de eliminar al participante.` : `Eliminar a ${deletionName} del padrón y retirar ${deleteTicketCount} ${deleteTicketCount === 1 ? 'ticket asignado' : 'tickets asignados'}. Se conservarán el historial y el usuario responsable.`} />
     <TicketEditor value={ticketEditor} onClose={() => setTicketEditor(null)} onSaved={savedTicket} />
     <StudentEditor open={!!editor} student={editor?.student} onClose={() => setEditor(null)} onSaved={savedStudent} />
     <ConfirmModal isOpen={confirming} title="Confirmar asignación" isDanger={false} confirmText="Confirmar y asignar" onConfirm={assign} onCancel={() => setConfirming(false)}
-      message={`Asignar ${parsed.numbers.length} tickets a ${selected?.name || ''} (${selected?.code || 'sin código'}): ${parsed.numbers.slice(0, 20).join(', ')}${parsed.numbers.length > 20 ? '…' : ''}. Verifica que los números coincidan con los tickets físicos.`} />
+      message={`Asignar ${parsed.numbers.length} tickets a ${selected?.name || ''} (${selected?.code || 'sin código'}): ${parsed.numbers.slice(0, 20).join(', ')}${parsed.numbers.length > 20 ? '…' : ''}. Verifica que los números coincidan con los tickets físicos. ${paymentMethod === 'pending' ? 'Quedarán pendientes de pago.' : `Se registrará el pago al instante en ${FACULTY_PAYMENT_LABELS[paymentMethod]} para todos los tickets.`}`} />
   </div>;
 }

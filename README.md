@@ -216,3 +216,18 @@ Ejecuta `supabase/migrations/20261104_semester_progress.sql` despues de la optim
 ### Resultados de busqueda en movil
 
 Al escribir un nombre o codigo en Reparto, las pantallas de hasta 1000 px muestran los resultados inmediatamente debajo del buscador, antes de filtros, porcentajes, resumen y panel de asignacion. Conservan las acciones de editar/asignar y la paginacion. Al limpiar la busqueda vuelve la distribucion habitual. La pantalla utiliza la misma consulta y conserva la persona seleccionada y el borrador de tickets; no agrega solicitudes ni cambia datos. En escritorio los resultados conservan su ubicacion en el espacio de trabajo.
+
+
+### Pagos al instante y eliminaciones con historial
+
+Todas las cuentas autenticadas, incluidos los repartidores, pueden eliminar participantes o tickets asignados y registrar pagos. En cada lote se elige Pendiente de pago, Efectivo o Yape; el medio se aplica a todos los tickets del lote. La asignacion y sus pagos se confirman en una sola transaccion. Para pagar una parte, asigna los numeros pagados en un lote separado. Los tickets anteriores tambien admiten Registrar pago desde su editor.
+
+Un ticket pagado exige **Anular pago** antes de eliminarlo, y un participante no se puede eliminar mientras tenga tickets pagados. Las anulaciones y eliminaciones piden confirmacion. El pago usa el precio guardado en la base, registra importe, medio, fecha y usuario, y no cambia el estado de recojo. Una anulacion conserva el cobro original y agrega su reverso en `faculty_payments`; no borra registros ni inventa fechas para pagos antiguos. Si un pago anterior no tiene evento original, su anulacion queda marcada como legado y conserva la instantanea disponible.
+
+Eliminar retira la ficha del padron activo y marca sus tickets como eliminados, conservando filas, IDs, auditoria y constancias originales. Los tickets sin historial de entrega pueden reutilizarse con el mismo ID; los que ya tuvieron entregas conservan reservado su numero. Eliminar un participante comprueba la version de su ficha y de todos sus tickets: otra asignacion, pago o edicion obliga a actualizar antes de continuar. Las fichas activas mantienen codigos unicos; el alta manual puede reutilizar el codigo de una ficha eliminada, mientras una importacion general respeta las eliminaciones anteriores.
+
+Para activar, ejecuta `supabase/migrations/20261105_distribution_payments_deletion.sql`; hay una copia identica en `artifacts/faculty-roster/activar_pagos_y_eliminaciones.sql`. Requiere las migraciones anteriores, incluida la de avance por semestre. La migracion agrega columnas, la tabla protegida de pagos y funciones transaccionales; ajusta el indice de codigos a las fichas activas. No elimina registros ni cambia pagos anteriores. No otorga escrituras directas sobre las tablas a los clientes: todas las funciones verifican sesion, y los autores provienen del JWT, no del navegador.
+
+El historial identifica el numero del ticket, pagos, anulaciones y eliminaciones con sus valores anteriores y posteriores y el usuario. El CSV incluye solo participantes y tickets activos, y agrega pagados, pendientes, numeros por medio e importe pagado. Los totales y porcentajes del padron excluyen los eliminados y siguen basados en la asignacion actual. El historial de lotes conserva las asignaciones historicas completas.
+
+Antes de reactivar Entregas hay que adaptar sus consultas para excluir los eliminados y respetar los pagos previos de Reparto y sus reversos; no se debe volver a cobrar un ticket pagado ni tratar una anulacion de recojo como anulacion del pago.

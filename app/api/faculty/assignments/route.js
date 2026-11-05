@@ -9,7 +9,7 @@ export async function POST(request) {
   try {
     const { supabase } = await requireSession();
     const input = allocationInput(await request.json());
-    const { data, error } = await supabase.rpc('assign_student_tickets', { p_student_id: input.studentId, p_ticket_numbers: input.ticketNumbers });
+    const { data, error } = await supabase.rpc('assign_faculty_tickets', { p_student_id: input.studentId, p_ticket_numbers: input.ticketNumbers, p_payment_method: input.paymentMethod });
     if (error) throw error;
     return NextResponse.json(data, { status: 201 });
   } catch (error) { return apiError(error); }
