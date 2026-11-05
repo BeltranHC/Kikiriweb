@@ -34,7 +34,7 @@ async function fixture(page) {
       const query=fold(url.searchParams.get('q') || ''); const semester=url.searchParams.get('semester') || 'all'; const type=url.searchParams.get('type')||'all'; const ticketStatus=url.searchParams.get('ticketStatus')||'all';
       const students=state.students.filter(student => query.split(/\s+/).every(token => fold(student.name+' '+student.code).includes(token)) && (semester==='all' || (student.semester ?? 0)===Number(semester)) && (type==='all'||(student.recipient_type||'student')===type) && (ticketStatus==='all'||(ticketStatus==='without'?student.tickets.length===0:student.tickets.length>0)))
         .sort((a,b)=>(a.semester??12)-(b.semester??12) || a.name.localeCompare(b.name));
-      await route.fulfill({json:{categories:['student','external','teacher'].map(type=>({type,count:state.students.filter(s=>(s.recipient_type||'student')===type).length})),students,total:students.length,hasMore:false,page:1,pageSize:30,semesters:[null,1,2,3,4,5,6,7,8,9,10,11].map(semester=>({semester,count:state.students.filter(s=>s.semester===semester).length})),summary:{totalAssignedTickets:state.students.reduce((total,person)=>total+person.tickets.length,0),totalStudents:state.students.length,withTickets:state.students.filter(s=>s.tickets.length).length,withoutTickets:state.students.filter(s=>!s.tickets.length).length}}});
+      await route.fulfill({json:{categories:['student','external','teacher'].map(type=>({type,count:state.students.filter(s=>(s.recipient_type||'student')===type).length,withTickets:state.students.filter(s=>(s.recipient_type||'student')===type&&s.tickets.length>0).length})),students,total:students.length,hasMore:false,page:1,pageSize:30,semesters:[null,1,2,3,4,5,6,7,8,9,10,11].map(semester=>({semester,count:state.students.filter(s=>(s.recipient_type||'student')==='student'&&s.semester===semester).length,withTickets:state.students.filter(s=>(s.recipient_type||'student')==='student'&&s.semester===semester&&s.tickets.length>0).length})),summary:{totalAssignedTickets:state.students.reduce((total,person)=>total+person.tickets.length,0),totalStudents:state.students.length,withTickets:state.students.filter(s=>s.tickets.length).length,withoutTickets:state.students.filter(s=>!s.tickets.length).length}}});
     } else if (url.pathname === '/api/faculty' && ['POST','PATCH'].includes(method)) {
       const body=route.request().postDataJSON();
       let student=state.students.find(s=>s.id===body.id);
@@ -363,4 +363,26 @@ test('Fast typing sends only the final query and an obsolete response cannot rep
   });
   await search(page).fill('obsolete');await pending;await search(page).fill('00123');await expect(page.getByRole('article')).toContainText('00123');release();
   await expect(page.getByRole('article')).toHaveCount(1);await expect(page.getByRole('article')).toContainText('00123');await expect(search(page)).toHaveValue('00123');
+});
+
+
+test('Semester coverage is based on people, stays global under filters, and fits both desktop and narrow mobile screens',async({page})=>{
+  const state=await fixture(page);
+  for(let i=0;i<3;i++)state.students.push({id:uuid(810+i),name:`SEMESTER THREE ${i}`,code:`THREE-${i}`,recipient_type:'student',semester:3,tickets:i===0?[1,2,3].map(n=>({id:uuid(900+n),ticket_number:1100+n})):[]});
+  await page.goto('/distribution');
+  const semesters=page.getByRole('group',{name:'Filtrar por semestre'});
+  const third=semesters.getByRole('button',{name:/^III /});const sixth=semesters.getByRole('button',{name:/^VI /});
+  await expect(third).toContainText('33,3%');await expect(third).toHaveAttribute('title','III semestre: 1 de 3 con al menos un ticket (33,3%)');
+  await expect(sixth).toContainText('0%');await expect(semesters.getByRole('button',{name:/^II /})).toContainText('100%');
+  const empty=semesters.getByRole('button',{name:/^I /});await expect(empty).toHaveAttribute('title','I semestre: sin participantes');await expect(empty).not.toContainText('NaN');await expect(empty).not.toContainText('100%');
+  await page.getByRole('group',{name:'Filtrar por tickets asignados'}).getByRole('button',{name:'Sin tickets',exact:true}).click();await search(page).fill('100002');await expect(page.getByRole('article')).toHaveCount(1);await expect(third).toContainText('33,3%');
+  await page.getByRole('article').getByRole('button',{name:'Asignar tickets',exact:true}).click();await page.getByLabel('N\u00fameros de ticket').fill('1300-1302');await page.getByRole('button',{name:'Asignar 3 tickets',exact:true}).click();await page.getByRole('button',{name:'Confirmar y asignar'}).click();await expect(sixth).toContainText('100%');
+  await page.getByRole('button',{name:'Limpiar filtros',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(6);await expect(third).toContainText('33,3%');
+  await page.evaluate(()=>scrollTo({top:200,behavior:'instant'}));await page.screenshot({path:'artifacts/ui-preview/distribution-semester-progress-desktop.png',animations:'disabled'});
+  for(const width of [320,360,390]) {
+    await page.setViewportSize({width,height:900});await expect(page.getByLabel('Grupo de participantes')).toBeVisible();
+    await expect(third).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+  await page.getByLabel('Grupo de participantes').selectOption('semester:0');await expect(page.getByRole('article')).toHaveCount(0);await page.getByLabel('Grupo de participantes').selectOption('all');await expect(page.getByRole('article')).toHaveCount(6);
+  await page.evaluate(()=>scrollTo({top:220,behavior:'instant'}));await page.screenshot({path:'artifacts/ui-preview/distribution-semester-progress-mobile.png',animations:'disabled'});
 });

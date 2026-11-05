@@ -1,0 +1,29 @@
+.panel { margin-top: 18px; padding: 18px; border: 1px solid var(--border-color); border-radius: 16px; background: var(--bg-secondary); }
+.panelHeader { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; min-height: 32px; }
+.label { font-size: .74rem; color: var(--text-primary); font-weight: 650; }
+.clear { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 4px 7px; color: var(--primary); background: transparent; border: 0; border-radius: 7px; font-size: .75rem; }
+.mobileGroups { display: none; }
+.groups { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.groupButton { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; border: 1px solid var(--border-color); border-radius: 9px; padding: 7px 11px; background: var(--bg-secondary); color: var(--text-secondary); font-size: .78rem; }
+.count { color: var(--text-tertiary); font-size: .7rem; font-variant-numeric: tabular-nums; }
+.groupPercentage { color: var(--success-light); padding-left: 7px; border-left: 1px solid var(--border-color); font-size: .7rem; font-weight: 600; }
+.semesterHeading { display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; margin: 19px 0 10px; }
+.semesterHeading > p:last-child { font-size: .71rem; color: var(--text-tertiary); }
+.semesters { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; }
+.semester { min-width: 0; min-height: 78px; text-align: left; padding: 10px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-primary); color: var(--text-secondary); }
+.semesterTop { display: flex; justify-content: space-between; gap: 4px; align-items: center; }
+.semesterTop strong { font-size: .83rem; font-weight: 650; }
+.percentage { display: block; margin-top: 7px; font-size: .74rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--primary); }
+.track { display: block; height: 3px; margin-top: 7px; border-radius: 8px; background: var(--border-color); overflow: hidden; }
+.track > span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.semester[data-complete="true"] .percentage { color: var(--success-light); }
+.semester[data-complete="true"] .track > span { background: var(--success); }
+.panel button[aria-pressed="true"] { background: var(--primary-glow); border-color: var(--primary); color: var(--primary); }
+.panel button[aria-pressed="true"] .count { color: var(--primary); }
+.panel button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.assignmentFilters { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 17px; }
+.assignmentFilters > div { display: flex; gap: 7px; flex-wrap: wrap; }
+.assignmentFilters button { min-height: 40px; padding: 7px 13px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-secondary); font-size: .78rem; }
+@media (max-width: 1050px) { .semesters { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .panel { padding: 14px; } .clear, .groupButton, .assignmentFilters button { min-height: 44px; } .groups { display: none; } .mobileGroups { display: flex; align-items: center; gap: 12px; } .mobileGroups select { min-width: 0; flex: 1; font-size: .8rem; min-height: 44px; } .semesters { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; } .semester { min-height: 74px; padding: 7px; } .semesterTop strong { font-size: .71rem; } .count { font-size: .64rem; } .percentage { font-size: .7rem; } .assignmentFilters { gap: 10px; } .assignmentFilters > .label { flex-basis: 100%; } }
+@media (max-width: 350px) { .semesters { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

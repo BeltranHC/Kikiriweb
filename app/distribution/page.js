@@ -8,10 +8,11 @@ import Pagination from '@/components/Pagination';
 import StudentEditor from '@/components/StudentEditor';
 import TicketEditor from '@/components/TicketEditor';
 import FacultyImport from '@/components/FacultyImport';
+import DirectoryFilters from '@/components/DirectoryFilters';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useSearchState } from '@/hooks/useSearchState';
 import { useFacultyDirectory } from '@/hooks/useFacultyDirectory';
-import { SEMESTERS, parseTicketNumbers, PROMOTION_SEMESTER, RECIPIENT_TYPES, recipientLabel } from '@/lib/faculty.mjs';
+import { parseTicketNumbers, recipientLabel } from '@/lib/faculty.mjs';
 import { request, requestJson, jsonBody } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import styles from './page.module.css';
@@ -37,7 +38,6 @@ export default function DistributionPage() {
   const assignmentPanel = useRef(null);
   const directoryPanel = useRef(null);
   const parsed = useMemo(() => { try { return { numbers: parseTicketNumbers(numberText), error: '' }; } catch (error) { return { numbers: [], error: error.message }; } }, [numberText]);
-  const counts = Object.fromEntries(directory.semesters.map(group => [group.semester ?? 0, group.count]));
   const scrollToPanel = panel => {
     if (window.matchMedia('(max-width: 1000px)').matches) requestAnimationFrame(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
@@ -102,19 +102,8 @@ export default function DistributionPage() {
     <section ref={directoryPanel} className={styles.directorySearch} aria-label="Buscar en el padrón">
         <div className={styles.directoryHeading}><div><h2>Buscar en el padrón</h2><p>Usa Editar datos para corregir el nombre, código, semestre o escuela de un estudiante.</p></div><button type="button" className="btn btn-secondary btn-sm" disabled={directory.loading} onClick={directory.refresh} aria-label="Actualizar padrón"><RefreshCw size={16} /></button></div>
         <SearchBar value={query} onSearch={setQuery} placeholder="Buscar por código, nombres o apellidos" />
-        <div className={styles.semesters} role="group" aria-label="Filtrar por semestre">
-          <button type="button" aria-pressed={semester === 'all' && type === 'all'} onClick={() => changeSemester('all')}>Todos <span>{directory.summary.totalStudents ?? 0}</span></button>
-          {SEMESTERS.map((label, index) => <button type="button" key={label} aria-pressed={semester === String(index + 1)} onClick={() => changeSemester(String(index + 1))}>{label} <span>{counts[index + 1] || 0}</span></button>)}
-          <button type="button" aria-pressed={semester === String(PROMOTION_SEMESTER)} onClick={() => changeSemester(String(PROMOTION_SEMESTER))}>Promoción <span>{counts[PROMOTION_SEMESTER] || 0}</span></button>
-          {['external','teacher'].map(value => <button type="button" key={value} aria-pressed={type === value} onClick={() => changeType(value)}>{RECIPIENT_TYPES[value]} <span>{directory.categories?.find(category => category.type === value)?.count || 0}</span></button>)}
-          <button type="button" aria-pressed={semester === '0'} onClick={() => changeSemester('0')}>Sin semestre <span>{counts[0] || 0}</span></button>
-        </div>
-        <div className={styles.ticketFilters}>
-          <div role="group" aria-label="Filtrar por tickets asignados">
-            {[['all', 'Todos'], ['without', 'Sin tickets'], ['with', 'Con tickets']].map(([value, label]) => <button type="button" key={value} aria-pressed={ticketStatus === value} onClick={() => changeTicketStatus(value)}>{label}</button>)}
-          </div>
-          {hasFilters && <button type="button" className={styles.clearFilters} onClick={clearFilters}><X size={15} aria-hidden="true" />Limpiar filtros</button>}
-        </div>
+        <DirectoryFilters directory={directory} semester={semester} type={type} ticketStatus={ticketStatus} hasFilters={hasFilters}
+          onSemesterChange={changeSemester} onTypeChange={changeType} onTicketStatusChange={changeTicketStatus} onClear={clearFilters} />
     </section>
     <section className={styles.metrics} aria-label="Resumen del padrón">
       <div><Users size={21} /><span>Total de participantes<strong>{directory.summary.totalStudents ?? '—'}</strong></span></div>

@@ -16,10 +16,6 @@
 .directory { min-width: 0; scroll-margin-top: 88px; }
 .directoryHeading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 18px; align-items: center; }
 .directoryHeading h2, .assignmentTitle h2, .importPanel h2 { font-size: 1.1rem; letter-spacing: -.02em; }
-.semesters { display: flex; gap: 7px; flex-wrap: wrap; margin: 16px 0; }
-.semesters button { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-color); color: var(--text-secondary); background: var(--bg-secondary); font-size: .78rem; }
-.semesters button[aria-pressed="true"] { color: var(--primary); border-color: var(--primary); background: var(--primary-glow); font-weight: 650; }
-.semesters span { font-size: .67rem; opacity: .75; }
 .resultCount { color: var(--text-tertiary); font-size: .78rem; margin: 12px 0; }
 .students { display: grid; gap: 9px; }
 .groupHeading { font-size: .8rem; color: var(--text-secondary); margin: 15px 0 9px; }
@@ -81,9 +77,3 @@
 .recipientOptions button { white-space: normal; text-align: left; justify-content: flex-start; min-height: 44px; }
 
 .metrics small { display: block; color: var(--text-tertiary); font-size: .65rem; line-height: 1.4; margin-top: 5px; }
-
-.ticketFilters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.ticketFilters > div { display: flex; flex-wrap: wrap; gap: 7px; }
-.ticketFilters button { min-height: 44px; padding: 8px 13px; border-radius: 9px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-secondary); font-size: .8rem; }
-.ticketFilters button[aria-pressed="true"] { color: var(--primary); border-color: var(--primary); background: var(--primary-glow); font-weight: 650; }
-.ticketFilters .clearFilters { display: inline-flex; align-items: center; gap: 5px; border-color: transparent; color: var(--primary); }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
-const files=['database.sql','20261031_faculty_distribution.sql','20261031_promotion_category.sql','20261031_distribution_only_history.sql','20261103_recipient_ticket_changes.sql','20261104_directory_performance.sql'];
+const files=['database.sql','20261031_faculty_distribution.sql','20261031_promotion_category.sql','20261031_distribution_only_history.sql','20261103_recipient_ticket_changes.sql','20261104_directory_performance.sql','20261104_semester_progress.sql'];
 const migrations=await Promise.all(files.map(file=>readFile(new URL('../'+(file==='database.sql'?'':'supabase/migrations/')+file,import.meta.url),'utf8')));
 
 test('Optimized directory preserves data, combines filters before pagination and counts current ownership once',async t=>{
@@ -56,6 +56,23 @@ test('Optimized directory preserves data, combines filters before pagination and
       await q("INSERT INTO public.students(name,recipient_type) SELECT 'BULK '||lpad(n::text,5,'0'),'external' FROM generate_series(1,1005)n");
       const first=await list({query:'BULK',status:'without',size:100}),last=await list({query:'BULK',status:'without',size:100,page:11});assert.equal(first.total,1005);assert.equal(first.students.length,100);assert.equal(last.students.length,5);assert.equal(last.hasMore,false);
       assert.equal(last.summary.totalStudents,1011);assert.equal(last.summary.totalAssignedTickets,353);
+    });
+    await run('Coverage counts each person once within their full semester and category, independently of search, status and pagination',async()=>{
+      const all=await list();const second=all.semesters.find(s=>s.semester===2);
+      assert.deepEqual(second,{semester:2,count:2,withTickets:1,withoutTickets:1});
+      const promotion=all.semesters.find(s=>s.semester===11);assert.deepEqual(promotion,{semester:11,count:1,withTickets:1,withoutTickets:0});
+      assert.equal(all.categories.find(c=>c.type==='external').withTickets,0);assert.equal(all.categories.find(c=>c.type==='teacher').withTickets,1);
+      for(const filter of [{query:'ANA',status:'without',size:1},{query:'missing'},{semester:11,type:'student'},{type:'teacher',status:'with',page:20}]) {
+        const filtered=await list(filter);assert.deepEqual(filtered.semesters,all.semesters);assert.deepEqual(filtered.categories,all.categories);
+      }
+      assert.equal(all.semesters.reduce((sum,s)=>sum+s.withTickets,0),2);
+      assert.equal(all.categories.reduce((sum,c)=>sum+c.withTickets,0),all.summary.withTickets);
+      await q("UPDATE public.tickets SET student_id=(SELECT id FROM public.students WHERE code='ANA') WHERE ticket_number=1001");
+      assert.deepEqual((await list()).semesters.find(s=>s.semester===2),{semester:2,count:2,withTickets:2,withoutTickets:0});
+      await q('UPDATE public.tickets SET student_id=NULL,is_available=true WHERE ticket_number=1001');
+      assert.deepEqual((await list()).semesters.find(s=>s.semester===2),second);
+      await q("UPDATE public.students SET semester=3 WHERE code='ANA'");
+      const changed=await list();assert.deepEqual(changed.semesters.find(s=>s.semester===2),{semester:2,count:1,withTickets:1,withoutTickets:0});assert.deepEqual(changed.semesters.find(s=>s.semester===3),{semester:3,count:1,withTickets:0,withoutTickets:1});
     });
     await run('Authentication and filter validation are enforced inside the SECURITY DEFINER query',async()=>{
       await db.exec('SET ROLE authenticated');assert.equal((await list()).total,6);await reject(()=>list({status:'invalid'}),'22023');await reject(()=>list({size:101}),'22023');await reject(()=>list({type:'admin'}),'22023');
