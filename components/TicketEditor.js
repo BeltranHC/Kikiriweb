@@ -13,7 +13,7 @@ export default function TicketEditor({value,onClose,onSaved}) {
   const [action,setAction]=useState('update');const [number,setNumber]=useState('');const [query,setQuery]=useState('');const [destination,setDestination]=useState(null);
   const [method,setMethod]=useState('cash');const [confirming,setConfirming]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
   const directory=useFacultyDirectory(query,1,'all',!!value&&action==='transfer'&&query.trim().length>0);
-  useEffect(()=>{if(!value){dialog.current?.close();return;}setAction(value.ticket.can_edit?'update':value.ticket.is_paid?'void':'pay');setNumber(String(value.ticket.ticket_number));setQuery('');setDestination(null);setMethod('cash');setConfirming(false);setError('');dialog.current.showModal();},[value]);
+  useEffect(()=>{if(!value){dialog.current?.close();return;}setAction(value.initialAction||(value.ticket.can_edit?'update':value.ticket.is_paid?'void':'pay'));setNumber(String(value.ticket.ticket_number));setQuery('');setDestination(null);setMethod('cash');setConfirming(false);setError('');dialog.current.showModal();},[value]);
   const labels={update:'Guardar corrección',transfer:'Reasignar ticket',release:'Retirar asignación',pay:'Registrar pago',void:'Anular pago',delete:'Eliminar ticket'};
   const ticket=value?.ticket;const amount=Number(ticket?.is_paid ? ticket.paid_amount ?? ticket.unit_price ?? TICKET_PRICE : ticket?.unit_price ?? TICKET_PRICE).toFixed(2);
   const submit=async event=>{

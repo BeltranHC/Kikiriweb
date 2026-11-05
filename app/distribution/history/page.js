@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { History,RefreshCw,Ticket,Users,ArrowLeft,Search,Clock } from 'lucide-react';
+import { History,RefreshCw,Ticket,Users,ArrowLeft,Search,Clock,Pencil } from 'lucide-react';
+import AssignmentTickets from '@/components/AssignmentTickets';
 import Pagination from '@/components/Pagination';
 import { useSearchState } from '@/hooks/useSearchState';
 import { useAssignmentHistory } from '@/hooks/useAssignmentHistory';
@@ -15,6 +16,7 @@ import styles from './page.module.css';
 const dateTime=new Intl.DateTimeFormat('es-PE',{timeZone:APP_TIME_ZONE,day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
 export default function AssignmentHistoryPage() {
   const {query,page,ready,setQuery,setPage}=useSearchState('assignment-history');
+  const [managing,setManaging]=useState(null);
   const [semester,setSemester]=useState('all');const [from,setFrom]=useState('');const [to,setTo]=useState('');
   const history=useAssignmentHistory(query,page,semester,from,to,ready);
   useAutoRefresh(()=>history.refresh({silent:true,background:true}),{enabled:ready});
@@ -36,14 +38,16 @@ export default function AssignmentHistoryPage() {
     </section>
     <div className={styles.meta}><p role="status">{history.loading?'Buscando asignaciones...':`${history.total} ${history.total===1?'asignación encontrada':'asignaciones encontradas'}`}</p><span><Clock size={13} />Fechas y horas de Lima, Perú</span></div>
     {history.error&&<div role="alert" className={styles.error}>{history.error}<button type="button" className="btn btn-secondary btn-sm" onClick={()=>history.refresh()}>Reintentar</button></div>}
-    {history.assignments.length>0?<div className={styles.tableWrap} aria-busy={history.loading}><table className={styles.table}><thead><tr><th>Asignación</th><th>Estudiante</th><th>Tickets asignados</th><th>Fecha y hora</th><th>Encargado</th></tr></thead><tbody>{history.assignments.map(item=><tr key={item.id}>
+    {history.assignments.length>0?<div className={styles.tableWrap} aria-busy={history.loading}><table className={styles.table}><thead><tr><th>Asignación</th><th>Estudiante</th><th>Tickets asignados</th><th>Fecha y hora</th><th>Encargado</th><th>Acciones</th></tr></thead><tbody>{history.assignments.map(item=><tr key={item.id}>
       <td data-label="Asignación"><strong className={styles.reference} title={item.id}>ASG-{item.id.slice(0,8)}</strong><span className={styles.badge}>{item.ticket_numbers.length} {item.ticket_numbers.length===1?'ticket':'tickets'}</span></td>
       <td data-label="Estudiante"><strong>{item.student_name}</strong><p className={styles.code}>{item.student_code||'Sin código registrado'}</p><span className={styles.group}>{recipientLabel(item)}</span>{item.current_student_name&&item.current_student_name!==item.student_name&&<p className={styles.current}>Perfil actual: {item.current_student_name}</p>}</td>
       <td data-label="Tickets asignados"><div className={styles.tickets}>{item.ticket_numbers.slice(0,12).map(number=><span key={number}>#{formatTicketNumber(number)}</span>)}</div>{item.ticket_numbers.length>12&&<details className={styles.allTickets}><summary>Ver los {item.ticket_numbers.length} tickets</summary><p>{item.ticket_numbers.map(number=>`#${formatTicketNumber(number)}`).join(', ')}</p></details>}</td>
       <td data-label="Fecha y hora"><time dateTime={item.created_at}>{dateTime.format(new Date(item.created_at))}</time></td>
       <td data-label="Encargado"><span className={styles.actor}>{item.actor_email||`Cuenta ${item.actor_id?.slice(0,8)||'sin correo'}`}</span><span className={styles.recorded}>Asignación registrada</span></td>
+      <td data-label="Acciones"><button type="button" className={`btn btn-secondary btn-sm ${styles.manage}`} onClick={()=>setManaging(item)} aria-label={`Editar tickets de ${item.student_name}, ASG-${item.id.slice(0,8)}`}><Pencil size={15} aria-hidden="true" />Editar / pagos</button></td>
     </tr>)}</tbody></table></div>:!history.loading&&!history.error&&<div className="empty-state"><History size={42} /><h2>{query||from||to||semester!=='all'?'No hay coincidencias':'Todavía no hay asignaciones'}</h2><p>{query||from||to||semester!=='all'?'Prueba otro nombre, ticket o rango de fechas.':'Los lotes que registres en Reparto aparecerán aquí con sus tickets y encargado.'}</p><Link className="btn btn-primary" href="/distribution">Ir a Reparto</Link></div>}
     <Pagination itemName="asignaciones" singularName="asignación" ariaLabel="Paginación de asignaciones" page={page} total={history.total} hasMore={history.hasMore} loading={history.loading} onPageChange={setPage} />
+    <AssignmentTickets value={managing} onClose={()=>setManaging(null)} onChanged={()=>history.refresh({silent:true})} />
     <p className={styles.footnote}>Los datos de cada registro corresponden al momento de la asignación.</p>
   </div>;
 }

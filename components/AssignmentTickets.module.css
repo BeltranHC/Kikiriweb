@@ -1,0 +1,14 @@
+.dialog { width: min(680px, calc(100vw - 28px)); max-width: 680px; max-height: 85dvh; overflow: auto; }
+.header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.header h2 { font-size: 1.15rem; }
+.header p { color: var(--text-secondary); overflow-wrap: anywhere; margin-top: 6px; }
+.header button { flex-shrink: 0; min-height: 44px; }
+.refresh { margin: 12px 0; min-height: 44px; }
+.success { color: var(--success-light); }
+.tickets { list-style: none; padding: 0; display: grid; gap: 10px; margin-top: 12px; }
+.tickets li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; }
+.tickets li > div { display: grid; gap: 3px; min-width: 0; }
+.tickets strong { font-family: 'Geist Mono', monospace; }
+.tickets span, .tickets small { color: var(--text-secondary); font-size: .8rem; }
+.tickets button { flex-shrink: 0; min-height: 44px; }
+@media(max-width: 400px) { .tickets li { align-items: flex-start; flex-wrap: wrap; } .tickets button { width: 100%; } }

@@ -18,10 +18,10 @@ async function compile(path, dependencies, exports) {
 }
 async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
-  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
+  const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
   return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
 }
-for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
+for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
     const client = { auth: { getUser: async () => ({ data: { user: null }, error: null }) }, from: () => assert.fail('Database must not be accessed') };
     const response = await (await handlers(route, client))[method]({ json: () => assert.fail('Body must not be read'), formData: () => assert.fail('File must not be read') });
@@ -264,4 +264,45 @@ test('Participant deletion requires an exact ticket-version snapshot and propaga
   const payload={id:user.id,expectedUpdatedAt:'2026-11-05T12:00:00Z',expectedTickets:[{id:user.id,updated_at:'2026-11-05T12:00:00Z'}]};
   assert.equal((await route.DELETE({json:async()=>({...payload,expectedTickets:undefined})})).status,400);assert.equal(calls.length,0);
   assert.equal((await route.DELETE({json:async()=>payload})).status,409);assert.equal(calls[0].name,'delete_faculty_recipient');assert.deepEqual(calls[0].args.p_expected_tickets,payload.expectedTickets);
+});
+
+
+test('History editing reads the current batch by ID, paginates tickets and protects tickets with past deliveries',async()=>{
+  const assignmentId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const student={id:user.id,name:'Current profile',deleted_at:null};
+  const tickets=Array.from({length:4},(_,index)=>({id:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,ticket_number:1010+index,
+    assignment_id:assignmentId,student_id:user.id,student,deleted_at:null,is_available:false,is_paid:index===1,is_picked_up:false,is_extra:false,movement_id:null}));
+  tickets[3]={...tickets[3],student:{...student,deleted_at:'2026-11-05T12:00:00Z'}};
+  const calls=[];const signal=new AbortController().signal;
+  const client={...authenticated(),from(table){
+    const filters={};return {select(){return this;},eq(key,value){filters[key]=value;return this;},is(key,value){filters[key]=value;return this;},order(){return this;},
+      overlaps(key,values){filters[key]=values;return this;},abortSignal(value){assert.equal(value,signal);return this;},
+      maybeSingle(){return this;},
+      then(resolve,reject){calls.push({table,filters});return Promise.resolve({data:{id:assignmentId,student_id:user.id}}).then(resolve,reject);},
+      async range(start,end){calls.push({table,filters,start,end});const data=table==='tickets'?tickets.filter(ticket=>Object.entries(filters).every(([key,value])=>ticket[key]===value))
+        :[{id:'old-movement',ticket_ids:[tickets[2].id]}].filter(m=>m.ticket_ids.some(id=>filters.ticket_ids.includes(id)));
+        return {data:data.slice(start,Math.min(end+1,start+2)),error:null};}
+    };
+  }};
+  const response=await(await handlers('faculty/tickets',client)).GET({url:`http://localhost/api/faculty/tickets?assignmentId=${assignmentId}`,signal});
+  assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+  const result=await response.json();assert.equal(result.assignmentId,assignmentId);assert.equal(result.tickets.length,3);
+  assert.deepEqual(result.tickets.map(ticket=>ticket.can_edit),[true,false,false]);assert(result.tickets.every(ticket=>ticket.can_manage));
+  assert.equal(result.tickets[0].student.name,'Current profile');assert.equal(result.tickets[0].ticket_number,1010);
+  assert(calls.filter(call=>call.table==='tickets').every(call=>call.filters.assignment_id===assignmentId&&call.filters.student_id===user.id));
+  assert(calls.filter(call=>call.table==='tickets').length>1);
+});
+
+test('History ticket lookup validates IDs, handles missing batches and never falls back to historical numbers',async()=>{
+  let reads=0;const client={...authenticated(),from(){reads++;return{select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};}};
+  const route=await handlers('faculty/tickets',client);
+  assert.equal((await route.GET({url:'http://localhost/api/faculty/tickets?assignmentId=invalid&number=1000'})).status,400);assert.equal(reads,0);
+  assert.equal((await route.GET({url:`http://localhost/api/faculty/tickets?assignmentId=${user.id}`})).status,404);assert.equal(reads,1);
+});
+
+
+test('Historical batches whose participant no longer exists remain readable with no editable tickets',async()=>{
+ const client={...authenticated(),from(table){assert.equal(table,'ticket_assignments');return{select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:user.id,student_id:null}})};}};
+ const response=await(await handlers('faculty/tickets',client)).GET({url:'http://localhost/api/faculty/tickets?assignmentId='+user.id});
+ assert.equal(response.status,200);assert.deepEqual((await response.json()).tickets,[]);
 });

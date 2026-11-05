@@ -233,3 +233,7 @@ La instalacion conserva una copia temporal privada de cada fila existente y comp
 El historial identifica el numero del ticket, pagos, anulaciones y eliminaciones con sus valores anteriores y posteriores y el usuario. El CSV incluye solo participantes y tickets activos, y agrega pagados, pendientes, numeros por medio e importe pagado. Los totales y porcentajes del padron excluyen los eliminados y siguen basados en la asignacion actual. El historial de lotes conserva las asignaciones historicas completas.
 
 Antes de reactivar Entregas hay que adaptar sus consultas para excluir los eliminados y respetar los pagos previos de Reparto y sus reversos; no se debe volver a cobrar un ticket pagado ni tratar una anulacion de recojo como anulacion del pago.
+
+Desde el historial de asignaciones, Editar / pagos abre los tickets que siguen activos en el lote y usa los mismos pagos, anulaciones y correcciones auditados de Reparto. Consulta por ID de lote y ticket actual, sin modificar las instantaneas originales ni operar sobre numeros historicos que pudieron reutilizarse. No requiere otra migracion.
+
+Los cobros de Reparto se conservan en faculty_payments y en el estado del ticket. Antes de reactivar Entregas, adaptar la caja para mostrar saldo acumulado y cobros del dia por separado, restar anulaciones y evitar contar nuevamente un pago al entregar. El calculo antiguo ticket_stats solo cuenta entregas del dia; no representa el dinero acumulado de Reparto. Entregas permanece inhabilitado.
