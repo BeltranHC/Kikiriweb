@@ -86,11 +86,17 @@ Una sesión vencida intenta renovarse una vez. Si necesita credenciales, muestra
 Para las pruebas de interacción, ejecuta `npm run build` y después `npm run test:ui`. Usan Chrome instalado (o el canal indicado con `PLAYWRIGHT_CHANNEL`), páginas compiladas y respuestas ficticias. No acceden a los datos ni a la autenticación real de Supabase. Las capturas de revisión se guardan en `artifacts/ui-preview`.
 
 
-## Arranque en Windows y OneDrive
+## Arranque en Windows, OneDrive y Dropbox
 
-`npm run dev` y `npm run build` limpian primero la carpeta generada `.next`, usando el sistema de archivos de Node para evitar el error `EINVAL: invalid argument, readlink` al procesar archivos sincronizados por OneDrive. La limpieza se limita a `.next`; los archivos fuente y la base de datos se conservan. Detén el servidor antes de ejecutar otra compilación.
+`npm run dev` prepara `.next-dev`; `npm run build` prepara `.next`. Antes de reiniciar desarrollo, deten su servidor con Ctrl+C para evitar limpiar archivos que siga usando. Las carpetas de desarrollo y produccion son independientes.
 
-Las capturas y los resultados de Playwright se guardan en `artifacts/`, fuera de `.next` y excluidos de Git. Después de usar el modo de desarrollo, ejecuta `npm run build` antes de `npm run start` o `npm run test:ui`.
+La preparacion elimina solamente el contenido generado de la carpeta correspondiente y conserva la carpeta raiz. Rechaza enlaces y junctions para impedir que la limpieza alcance otra ubicacion. No modifica codigo fuente, credenciales ni datos de Supabase.
+
+En Windows, si el proyecto esta dentro de Dropbox, marca solo `.next-dev` o `.next` con el atributo `com.dropbox.ignored` antes de que Next.js genere sus archivos. La marca se conserva entre arranques, de modo que los manifiestos y el cache quedan locales. Es el mecanismo documentado por [Dropbox](https://help.dropbox.com/sync/ignored-files); `.gitignore` por si solo no excluye archivos de Dropbox. Si la carpeta contiene archivos solo en linea y Dropbox no permite ignorarla, el comando se detiene y pide hacerla disponible sin conexion.
+
+Esta preparacion evita reutilizar archivos generados incompletos y reduce interferencias de sincronizacion como `EINVAL: readlink` o `UNKNOWN: open pages-manifest.json`. Si persisten los bloqueos del proveedor, usa una copia de trabajo fuera de la carpeta sincronizada.
+
+Las capturas y resultados de Playwright quedan en `artifacts/`, fuera de los directorios de Next.js y excluidos de Git. Ejecuta `npm run build` antes de `npm run start` o `npm run test:ui`.
 
 
 ## Padrón de la facultad y reparto de tickets
