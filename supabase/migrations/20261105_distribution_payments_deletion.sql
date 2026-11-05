@@ -2,6 +2,28 @@
 -- Ejecutar despues de 20261104_semester_progress.sql. No elimina registros existentes.
 BEGIN;
 SET LOCAL lock_timeout = '10s';
+
+-- La instalacion no llama a las funciones de eliminar, pagar, anular ni reasignar.
+-- Guardar cada fila original y verificarla antes de confirmar. Las copias son temporales.
+CREATE TEMP TABLE pg_temp.kikiri_payment_install_before (
+  entity text NOT NULL, id uuid NOT NULL, original jsonb NOT NULL, PRIMARY KEY(entity,id)
+) ON COMMIT DROP;
+ALTER TABLE pg_temp.kikiri_payment_install_before ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON pg_temp.kikiri_payment_install_before FROM PUBLIC,anon,authenticated,service_role;
+DO $capture_existing_data$
+DECLARE v_table text;
+BEGIN
+  FOREACH v_table IN ARRAY ARRAY['students','tickets','ticket_assignments','ticket_movements','faculty_changes','faculty_payments'] LOOP
+    IF to_regclass(format('public.%I',v_table)) IS NULL THEN
+      IF v_table='faculty_payments' THEN CONTINUE; END IF;
+      RAISE EXCEPTION 'Falta la tabla %. Ejecuta primero las migraciones anteriores.',v_table;
+    END IF;
+    -- Bloqueo acotado por lock_timeout. Las consultas y escrituras pueden esperar durante la migracion.
+    EXECUTE format('LOCK TABLE public.%I IN ACCESS EXCLUSIVE MODE',v_table);
+    EXECUTE format('INSERT INTO pg_temp.kikiri_payment_install_before(entity,id,original) SELECT $1,t.id,to_jsonb(t) FROM public.%I t',v_table) USING v_table;
+  END LOOP;
+END $capture_existing_data$;
+
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS deleted_by uuid;
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS deleted_by_email text;
@@ -379,6 +401,38 @@ CREATE OR REPLACE FUNCTION public.faculty_directory(p_query text DEFAULT '',p_se
 RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$SELECT public.faculty_directory_v2(p_query,p_semester,NULL,'all',p_page,p_page_size)$$;
 REVOKE ALL ON FUNCTION public.set_faculty_ticket_payment(uuid,uuid,text,text,timestamptz),public.assign_faculty_tickets(uuid,integer[],text),public.delete_faculty_ticket(uuid,uuid,timestamptz),public.delete_faculty_recipient(uuid,timestamptz,jsonb) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.set_faculty_ticket_payment(uuid,uuid,text,text,timestamptz),public.assign_faculty_tickets(uuid,integer[],text),public.delete_faculty_ticket(uuid,uuid,timestamptz),public.delete_faculty_recipient(uuid,timestamptz,jsonb) TO authenticated;
-SELECT 'Pagos y eliminaciones con historial habilitados' AS resultado;
+-- No basta con conservar el numero de filas: comparar propietarios, numeros, fechas, pagos e instantaneas.
+DO $verify_existing_data$
+DECLARE v_table text;v_changed boolean;
+BEGIN
+  FOREACH v_table IN ARRAY ARRAY['students','tickets','ticket_assignments','ticket_movements','faculty_changes','faculty_payments'] LOOP
+    EXECUTE format($verify_query$
+      SELECT EXISTS(
+        SELECT 1 FROM (
+          SELECT id,original FROM pg_temp.kikiri_payment_install_before WHERE entity=$1
+        ) b FULL JOIN (
+          SELECT t.id,to_jsonb(t) AS current_data FROM public.%I t
+        ) a ON a.id=b.id
+        WHERE b.id IS NULL OR a.id IS NULL OR EXISTS(
+          SELECT 1 FROM jsonb_each(b.original) f WHERE a.current_data->f.key IS DISTINCT FROM f.value
+        ) OR EXISTS(
+          SELECT 1 FROM jsonb_each(a.current_data) f WHERE NOT(b.original ? f.key) AND f.value IS DISTINCT FROM 'null'::jsonb
+        )
+      )
+    $verify_query$,v_table) INTO v_changed USING v_table;
+    IF v_changed THEN
+      RAISE EXCEPTION 'Verificacion fallida: cambiaron datos de %. Se cancela toda la migracion.',v_table USING ERRCODE='P0001';
+    END IF;
+  END LOOP;
+  RAISE NOTICE 'Asignaciones, propietarios de tickets, estudiantes, pagos e historial originales verificados sin cambios.';
+END $verify_existing_data$;
+SELECT 'Asignaciones y datos existentes conservados; funciones habilitadas' AS resultado,
+  (SELECT count(*) FROM pg_temp.kikiri_payment_install_before WHERE entity='ticket_assignments') AS asignaciones_antes,
+  (SELECT count(*) FROM public.ticket_assignments) AS asignaciones_despues,
+  (SELECT count(*) FROM pg_temp.kikiri_payment_install_before WHERE entity='tickets') AS tickets_antes,
+  (SELECT count(*) FROM public.tickets) AS tickets_despues,
+  (SELECT count(*) FROM pg_temp.kikiri_payment_install_before WHERE entity='students') AS participantes_antes,
+  (SELECT count(*) FROM public.students) AS participantes_despues;
+
 NOTIFY pgrst,'reload schema';
 COMMIT;

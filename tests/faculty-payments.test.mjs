@@ -87,5 +87,18 @@ test('Distribution payments and deletions preserve history, enforce reversal bef
   await t.test('Reapplying the migration preserves archives, reused student codes, payment records and audit snapshots',async()=>{
    await login();const archived=await save('IDEMPOTENT');await removePerson(archived);const active=await save('IDEMPOTENT');await assign(active,[7000],'yape');const allTables=[...tables,'faculty_payments'];const before=await Promise.all(allTables.map(rows));await db.exec(migrations.at(-1));assert.deepEqual(await Promise.all(allTables.map(rows)),before);
   });
+  await t.test('Preservation guard cancels and rolls back owner changes, assignment snapshot changes and accidental archival during installation',async()=>{
+   const guardedTables=[...tables,'faculty_payments'];
+   for(const mutation of [
+    'UPDATE public.tickets SET student_id=NULL WHERE ticket_number=7000;',
+    'UPDATE public.ticket_assignments SET ticket_numbers=ARRAY[9999] WHERE ticket_numbers @> ARRAY[7000];',
+    'UPDATE public.tickets SET deleted_at=clock_timestamp() WHERE ticket_number=7000;'
+   ]){
+    const before=await Promise.all(guardedTables.map(rows));
+    const altered=migrations.at(-1).replace('DO $verify_existing_data$',mutation+'\nDO $verify_existing_data$');
+    try{await assert.rejects(db.exec(altered),error=>error.code==='P0001'&&/Verificacion fallida/.test(error.message));}finally{await db.exec('ROLLBACK');}
+    assert.deepEqual(await Promise.all(guardedTables.map(rows)),before);
+   }
+  });
  }finally{await db.close();}
 });
