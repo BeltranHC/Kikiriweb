@@ -187,3 +187,14 @@ La exportacion refleja la asignacion actual: un ticket retirado no figura en su 
 ### Totales en Reparto
 
 Las tres tarjetas principales muestran el total de participantes, participantes sin tickets y tickets repartidos. Son totales de todo el padron, independientes de la busqueda y de los filtros. Los tickets se cuentan por su propietario actual, incluidos los anteriores de Promocion aunque no tengan una constancia de reparto nueva. Una reasignacion no duplica el total; retirar una asignacion deja ese ticket fuera de los repartidos hasta volver a asignarlo. No se suman movimientos historicos ni se limita el total a la pagina visible. El conteo exacto de tickets se actualiza junto con el padron al guardar o actualizar y no requiere migracion adicional.
+
+
+### Consultas y filtros de tickets (4 de noviembre)
+
+En Reparto se pueden combinar **Sin tickets**, **Con tickets** o **Todos** con nombre/codigo, semestre, Promocion y categoria de participante. **Limpiar filtros** vuelve al padron completo. Los filtros se aplican en la base antes de paginar; los totales principales siguen siendo globales. Cambiar filtros o actualizar conserva la persona seleccionada y los numeros que aun no se han asignado.
+
+Ejecuta `supabase/migrations/20261104_directory_performance.sql` despues de la migracion de participantes del 3 de noviembre. Hay una copia identica en `artifacts/faculty-roster/optimizar_consultas_y_filtros.sql`. Agrega una funcion de lectura con permisos para operadores autenticados, sin modificar participantes, tickets, pagos ni historial. Puede ejecutarse de nuevo. Las consultas anteriores siguen disponibles; si aun falta la migracion, la aplicacion conserva la consulta general y avisa que los filtros de tickets requieren activacion.
+
+El nuevo RPC calcula una sola vez los tickets por propietario y reutiliza el resultado para los filtros y los totales. Entrega listado, conteos y categorias en una llamada y una misma consulta SQL, sin contar lotes historicos ni consultar aparte el total de tickets. La revision de protecciones de edicion solo se aplica a los tickets de la pagina visible; se conservan todos los tickets de cada persona. Usa los indices ya existentes de propietario y movimientos, sin agregar indices redundantes.
+
+La espera de 250 ms se aplica solo mientras se escribe; abrir el padron y cambiar filtros o pagina inicia la consulta inmediatamente. Las busquedas anteriores se cancelan tambien en la solicitud a Supabase y sus respuestas no reemplazan las mas recientes. No se agregan recargas de pagina ni cache compartida con datos personales. La cabecera `Server-Timing` informa el tiempo de la consulta del directorio para comparar su comportamiento en produccion; no incluye la autenticacion ni el viaje de red desde el navegador.

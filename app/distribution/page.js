@@ -20,6 +20,7 @@ export default function DistributionPage() {
   const { query, page, ready, setQuery, setPage } = useSearchState('distribution');
   const [semester, setSemester] = useState('all');
   const [type, setType] = useState('all');
+  const [ticketStatus, setTicketStatus] = useState('all');
   const [ticketEditor, setTicketEditor] = useState(null);
   const [selected, setSelected] = useState(null);
   const [assignmentClosed, setAssignmentClosed] = useState(false);
@@ -31,7 +32,7 @@ export default function DistributionPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [receipt, setReceipt] = useState(null);
-  const directory = useFacultyDirectory(query, page, semester, ready, type);
+  const directory = useFacultyDirectory(query, page, semester, ready, type, ticketStatus);
   const toast = useToast();
   const assignmentPanel = useRef(null);
   const directoryPanel = useRef(null);
@@ -51,6 +52,9 @@ export default function DistributionPage() {
   };
   const changeSemester = value => { setSemester(value); setType(value === 'all' ? 'all' : 'student'); setPage(1); };
   const changeType = value => { setType(value); setSemester('all'); setPage(1); };
+  const changeTicketStatus = value => { setTicketStatus(value); setPage(1); };
+  const clearFilters = () => { setSemester('all'); setType('all'); setTicketStatus('all'); setQuery(''); };
+  const hasFilters = !!query || semester !== 'all' || type !== 'all' || ticketStatus !== 'all';
   const savedTicket = result => {
     setSelected(previous => previous?.id === result.previousStudentId ? {...previous,tickets:previous.tickets.filter(ticket => ticket.id !== result.ticket.id).concat(result.ticket.student_id === previous.id ? [result.ticket] : []).sort((a,b)=>a.ticket_number-b.ticket_number)} : previous);
     setReceipt(null); directory.refresh(); toast.success('Cambio de ticket registrado con tu usuario');
@@ -105,6 +109,12 @@ export default function DistributionPage() {
           {['external','teacher'].map(value => <button type="button" key={value} aria-pressed={type === value} onClick={() => changeType(value)}>{RECIPIENT_TYPES[value]} <span>{directory.categories?.find(category => category.type === value)?.count || 0}</span></button>)}
           <button type="button" aria-pressed={semester === '0'} onClick={() => changeSemester('0')}>Sin semestre <span>{counts[0] || 0}</span></button>
         </div>
+        <div className={styles.ticketFilters}>
+          <div role="group" aria-label="Filtrar por tickets asignados">
+            {[['all', 'Todos'], ['without', 'Sin tickets'], ['with', 'Con tickets']].map(([value, label]) => <button type="button" key={value} aria-pressed={ticketStatus === value} onClick={() => changeTicketStatus(value)}>{label}</button>)}
+          </div>
+          {hasFilters && <button type="button" className={styles.clearFilters} onClick={clearFilters}><X size={15} aria-hidden="true" />Limpiar filtros</button>}
+        </div>
     </section>
     <section className={styles.metrics} aria-label="Resumen del padrón">
       <div><Users size={21} /><span>Total de participantes<strong>{directory.summary.totalStudents ?? '—'}</strong></span></div>
@@ -113,10 +123,10 @@ export default function DistributionPage() {
     </section>
     {importing && <FacultyImport onImported={directory.refresh} onClose={() => setImporting(false)} />}
     <div className={`${styles.workspace} ${assignmentClosed ? styles.workspaceClosed : ''}`}>
-      <section className={styles.directory} aria-label="Padrón por semestre">
+      <section className={styles.directory} aria-busy={directory.loading} aria-label="Padrón por semestre">
         <p className={styles.resultCount} role="status">{directory.loading ? 'Buscando estudiantes...' : `${directory.total} estudiantes encontrados`}</p>
         {directory.error && <div role="alert" className={styles.error}><p>{directory.error}</p><button type="button" className="btn btn-secondary btn-sm" onClick={directory.refresh}>Reintentar</button></div>}
-        {!directory.error && directory.students.length === 0 && !directory.loading && <div className="empty-state"><Search size={34} /><h3>No encontramos estudiantes</h3><p>Prueba otro nombre o código, cambia el semestre o agrega al estudiante.</p><button className="btn btn-primary" type="button" onClick={() => setEditor({ student: null })}>Agregar estudiante</button></div>}
+        {!directory.error && directory.students.length === 0 && !directory.loading && <div className="empty-state"><Search size={34} /><h3>No encontramos estudiantes</h3><p>Prueba otro nombre o código, cambia los filtros o agrega al estudiante.</p><button className="btn btn-primary" type="button" onClick={() => setEditor({ student: null })}>Agregar estudiante</button></div>}
         <div className={styles.students}>{directory.students.map((student, index) => {
           const previous = directory.students[index - 1];
           const groupStart = index === 0 || previous.semester !== student.semester || previous.recipient_type !== student.recipient_type;

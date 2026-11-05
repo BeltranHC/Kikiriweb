@@ -81,3 +81,9 @@
 .recipientOptions button { white-space: normal; text-align: left; justify-content: flex-start; min-height: 44px; }
 
 .metrics small { display: block; color: var(--text-tertiary); font-size: .65rem; line-height: 1.4; margin-top: 5px; }
+
+.ticketFilters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ticketFilters > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.ticketFilters button { min-height: 44px; padding: 8px 13px; border-radius: 9px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-secondary); font-size: .8rem; }
+.ticketFilters button[aria-pressed="true"] { color: var(--primary); border-color: var(--primary); background: var(--primary-glow); font-weight: 650; }
+.ticketFilters .clearFilters { display: inline-flex; align-items: center; gap: 5px; border-color: transparent; color: var(--primary); }

@@ -25,14 +25,14 @@ async function fixture(page) {
     }
     if (!url.pathname.startsWith('/api/')) { await route.continue(); return; }
     const method = route.request().method();
-    state.calls.push({ path:url.pathname,method,query:url.searchParams.get('q'),page:url.searchParams.get('page') });
+    state.calls.push({ path:url.pathname,method,query:url.searchParams.get('q'),page:url.searchParams.get('page'),ticketStatus:url.searchParams.get('ticketStatus') });
     if(url.pathname==='/api/faculty/export') {
       await route.fulfill({headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="participantes_tickets_2026-11-03.csv"'},body:participantReport(state.students,state.students.flatMap(person=>person.tickets.map(ticket=>({...ticket,student_id:person.id}))))});
       return;
     }
     if (url.pathname === '/api/faculty' && method === 'GET') {
-      const query=fold(url.searchParams.get('q') || ''); const semester=url.searchParams.get('semester') || 'all'; const type=url.searchParams.get('type')||'all';
-      const students=state.students.filter(student => query.split(/\s+/).every(token => fold(student.name+' '+student.code).includes(token)) && (semester==='all' || (student.semester ?? 0)===Number(semester)) && (type==='all'||(student.recipient_type||'student')===type))
+      const query=fold(url.searchParams.get('q') || ''); const semester=url.searchParams.get('semester') || 'all'; const type=url.searchParams.get('type')||'all'; const ticketStatus=url.searchParams.get('ticketStatus')||'all';
+      const students=state.students.filter(student => query.split(/\s+/).every(token => fold(student.name+' '+student.code).includes(token)) && (semester==='all' || (student.semester ?? 0)===Number(semester)) && (type==='all'||(student.recipient_type||'student')===type) && (ticketStatus==='all'||(ticketStatus==='without'?student.tickets.length===0:student.tickets.length>0)))
         .sort((a,b)=>(a.semester??12)-(b.semester??12) || a.name.localeCompare(b.name));
       await route.fulfill({json:{categories:['student','external','teacher'].map(type=>({type,count:state.students.filter(s=>(s.recipient_type||'student')===type).length})),students,total:students.length,hasMore:false,page:1,pageSize:30,semesters:[null,1,2,3,4,5,6,7,8,9,10,11].map(semester=>({semester,count:state.students.filter(s=>s.semester===semester).length})),summary:{totalAssignedTickets:state.students.reduce((total,person)=>total+person.tickets.length,0),totalStudents:state.students.length,withTickets:state.students.filter(s=>s.tickets.length).length,withoutTickets:state.students.filter(s=>!s.tickets.length).length}}});
     } else if (url.pathname === '/api/faculty' && ['POST','PATCH'].includes(method)) {
@@ -333,4 +333,34 @@ test('Main totals remain global, include legacy Promotion tickets and update aft
   const dialog=page.getByRole('dialog',{name:'Editar ticket #1050'});await dialog.getByLabel('Operación').selectOption('release');await dialog.getByRole('button',{name:'Retirar asignación',exact:true}).click();await expect(dialog).not.toBeVisible();
   await expect(distributed.locator('strong')).toHaveText('3');await expect(pending.locator('strong')).toHaveText('1');expect(state.students[0].tickets[0].ticket_number).toBe(1000);
   await page.evaluate(()=>scrollTo({top:0,behavior:'instant'}));expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'artifacts/ui-preview/distribution-main-totals-mobile.png',animations:'disabled'});
+});
+
+
+test('Ticket filters combine with search and semester, reset together and preserve the active assignment draft',async({page})=>{
+  await page.setViewportSize({width:360,height:800});const state=await fixture(page);await page.goto('/distribution');
+  const filters=page.getByRole('group',{name:'Filtrar por tickets asignados'});
+  await expect(page.getByRole('article')).toHaveCount(3);
+  await filters.getByRole('button',{name:'Sin tickets',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(2);
+  await page.getByRole('group',{name:'Filtrar por semestre'}).getByRole('button',{name:/^VI /}).click();await expect(page.getByRole('article')).toHaveCount(1);
+  await page.getByRole('article').getByRole('button',{name:'Asignar tickets',exact:true}).click();await page.getByLabel('Números de ticket').fill('1300-1302');
+  await search(page).fill('missing');await expect(page.getByRole('article')).toHaveCount(0);await page.getByRole('button',{name:'Limpiar filtros',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(3);await expect(search(page)).toHaveValue('');
+  await filters.getByRole('button',{name:'Con tickets',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(1);await expect(page.getByRole('article')).toContainText('00123');
+  await page.getByRole('button',{name:'Actualizar padrón'}).click();await expect(page.getByLabel('Números de ticket')).toHaveValue('1300-1302');
+  const summary=page.getByRole('region',{name:'Resumen del padrón'});await expect(summary).toContainText('Total de participantes3');await expect(summary).toContainText('Participantes sin tickets2');
+  await filters.getByRole('button',{name:'Sin tickets',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(2);await expect(page.getByLabel('Números de ticket')).toHaveValue('1300-1302');
+  expect(state.calls.filter(c=>c.method!=='GET')).toHaveLength(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.evaluate(()=>scrollTo({top:0,behavior:'instant'}));await page.screenshot({path:'artifacts/ui-preview/distribution-ticket-filters-mobile.png',animations:'disabled'});
+});
+
+test('Fast typing sends only the final query and an obsolete response cannot replace the latest results',async({page})=>{
+  const state=await fixture(page);await page.goto('/distribution');await expect(page.getByRole('article')).toHaveCount(3);state.calls.length=0;
+  await search(page).pressSequentially('100002',{delay:20});await expect(page.getByRole('article')).toHaveCount(1);await expect(page.getByRole('article')).toContainText('ALVAREZ ANA');
+  expect(state.calls.filter(c=>c.path==='/api/faculty').map(c=>c.query)).toEqual(['100002']);
+  let release;let started;const pending=new Promise(resolve=>{started=resolve;});
+  await page.route('**/api/faculty?**',async route=>{
+    const url=new URL(route.request().url());if(url.searchParams.get('q')!=='obsolete'){await route.fallback();return;}
+    await new Promise(resolve=>{release=resolve;started();});try{await route.fulfill({json:{students:[],total:0,hasMore:false,semesters:[],summary:{}}});}catch{/* The client already cancelled this obsolete search. */}
+  });
+  await search(page).fill('obsolete');await pending;await search(page).fill('00123');await expect(page.getByRole('article')).toContainText('00123');release();
+  await expect(page.getByRole('article')).toHaveCount(1);await expect(page.getByRole('article')).toContainText('00123');await expect(search(page)).toHaveValue('00123');
 });

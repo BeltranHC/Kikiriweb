@@ -145,20 +145,40 @@ test('GET /api/tickets?number= looks up a single ticket and its student', async 
 });
 
 
-test('Faculty API validates directory filters before calling PostgreSQL', async () => {
+test('Faculty filters and global totals use one database call without a separate ticket count', async () => {
   const calls=[];
-  const client={...authenticated(async (name,args) => { calls.push({name,args}); return {data:{students:[],total:0,summary:{totalStudents:1500,withoutTickets:99}},error:null}; }),
-    from(table) {assert.equal(table,'tickets');return {select(fields,options) {assert.equal(fields,'id');assert.deepEqual(options,{head:true,count:'exact'});return {not:async(field,operator,value)=>{assert.equal(field,'student_id');assert.equal(operator,'is');assert.equal(value,null);return {count:2450,error:null};}};}};}};
+  const client={...authenticated(async (name,args) => { calls.push({name,args}); return {data:{students:[],total:0,summary:{totalStudents:1500,withoutTickets:99,totalAssignedTickets:2450}},error:null}; }),
+    from() {assert.fail('The optimized RPC includes the ticket count');}};
   const route=await handlers('faculty',client);
-  assert.equal((await route.GET({url:'http://localhost/api/faculty?semester=12'})).status,400);
+  for (const filter of ['semester=12','ticketStatus=invalid','pageSize=101']) assert.equal((await route.GET({url:`http://localhost/api/faculty?${filter}`})).status,400);
   assert.equal(calls.length,0);
-  assert.equal((await route.GET({url:'http://localhost/api/faculty?q=Jose&semester=2&page=3'})).status,200);
-  assert.equal(calls[0].name,'faculty_recipient_directory'); assert.equal(calls[0].args.p_semester,2); assert.equal(calls[0].args.p_page,3);
-  assert.equal((await route.GET({url:'http://localhost/api/faculty?semester=11'})).status,200);
-  assert.equal(calls[1].args.p_semester,11);
-  const data=await (await route.GET({url:'http://localhost/api/faculty?q=only-one-person&type=teacher'})).json();
-  assert.deepEqual(data.summary,{totalStudents:1500,withoutTickets:99,totalAssignedTickets:2450});
+  assert.equal((await route.GET({url:'http://localhost/api/faculty?q=Jose&semester=2&page=3&ticketStatus=without'})).status,200);
+  assert.equal(calls[0].name,'faculty_directory_v2'); assert.equal(calls[0].args.p_semester,2); assert.equal(calls[0].args.p_page,3);assert.equal(calls[0].args.p_ticket_status,'without');
+  const response=await route.GET({url:'http://localhost/api/faculty?q=only-one-person&type=teacher&ticketStatus=with'});
+  assert.equal(calls[1].args.p_recipient_type,'teacher');assert.equal(calls[1].args.p_ticket_status,'with');
+  const data=await response.json();assert.deepEqual(data.summary,{totalStudents:1500,withoutTickets:99,totalAssignedTickets:2450});
+  assert.match(response.headers.get('Server-Timing'),/^directory;dur=[\d.]+$/);assert.equal(response.headers.get('Cache-Control'),'private, no-store');
 });
+
+test('Older directory remains readable before activation and ticket filters never silently return unfiltered data', async () => {
+  const calls=[];
+  const client={...authenticated(async(name,args)=>{calls.push({name,args});return name==='faculty_directory_v2'?{error:{code:'PGRST202'}}:{data:{students:[],summary:{totalStudents:9}},error:null};}),
+    from(table){assert.equal(table,'tickets');return {select(){return {not:async()=>({count:350,error:null})};}};}};
+  const route=await handlers('faculty',client);
+  const response=await route.GET({url:'http://localhost/api/faculty'});assert.equal(response.status,200);
+  assert.equal((await response.json()).summary.totalAssignedTickets,350);assert.deepEqual(calls.map(c=>c.name),['faculty_directory_v2','faculty_recipient_directory']);
+  calls.length=0;
+  const filter=await route.GET({url:'http://localhost/api/faculty?ticketStatus=without'});assert.equal(filter.status,503);assert.match((await filter.json()).error,/activaci/);assert.equal(calls.length,1);
+});
+
+test('Cancelled searches forward their abort signal to the database and database failures do not downgrade to older queries',async()=>{
+  const signal=new AbortController().signal;let received;
+  const client=authenticated(()=>({abortSignal(value){received=value;return Promise.resolve({data:{students:[]},error:null});}}));
+  assert.equal((await (await handlers('faculty',client)).GET({url:'http://localhost/api/faculty',signal})).status,200);assert.equal(received,signal);
+  let calls=0;const broken=authenticated(async()=>{calls++;return {error:{code:'42501',message:'denied'}};});
+  assert.equal((await (await handlers('faculty',broken)).GET({url:'http://localhost/api/faculty'})).status,403);assert.equal(calls,1);
+});
+
 test('Faculty edits require a version and propagate code conflicts',async () => {
   const calls=[];
   const client=authenticated(async (name,args) => {calls.push({name,args});return {data:null,error:{code:'23505',message:'students_code_unique_idx'}};});
