@@ -386,3 +386,25 @@ test('Semester coverage is based on people, stays global under filters, and fits
   await page.getByLabel('Grupo de participantes').selectOption('semester:0');await expect(page.getByRole('article')).toHaveCount(0);await page.getByLabel('Grupo de participantes').selectOption('all');await expect(page.getByRole('article')).toHaveCount(6);
   await page.evaluate(()=>scrollTo({top:220,behavior:'instant'}));await page.screenshot({path:'artifacts/ui-preview/distribution-semester-progress-mobile.png',animations:'disabled'});
 });
+
+
+test('Mobile search results sit immediately below the search box, before filters and the existing assignment, without losing the draft',async({page})=>{
+  const state=await fixture(page);await page.setViewportSize({width:390,height:844});await page.goto('/distribution');
+  await choose(page);await page.getByLabel('N\u00fameros de ticket').fill('1400-1402');
+  await search(page).fill('100002');await expect(page.getByRole('article')).toHaveCount(1);await expect(page.getByRole('article')).toContainText('ALVAREZ ANA');
+  const bounds=async()=>{
+    const elements=await Promise.all([search(page).elementHandle(),page.getByRole('article').elementHandle(),page.getByRole('group',{name:'Filtrar por semestre'}).elementHandle(),page.getByRole('region',{name:'Resumen del padr\u00f3n'}).elementHandle(),page.getByRole('complementary',{name:'Asignar tickets al estudiante'}).elementHandle()]);
+    const [input,result,filters,summary,assignment]=await page.evaluate(nodes=>nodes.map(node=>{const rect=node.getBoundingClientRect();return {y:rect.top+window.scrollY,height:rect.height};}),elements);
+    expect(result.y).toBeGreaterThan(input.y+input.height);expect(result.y-(input.y+input.height)).toBeLessThan(100);
+    expect(result.y+result.height).toBeLessThan(filters.y);expect(result.y).toBeLessThan(summary.y);expect(result.y).toBeLessThan(assignment.y);
+  };
+  for(const width of [320,390,768]){await page.setViewportSize({width,height:900});await bounds();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+  await expect(page.getByLabel('N\u00fameros de ticket')).toHaveValue('1400-1402');
+  await search(page).fill('NO MATCH');await expect(page.getByRole('heading',{name:'No encontramos estudiantes'})).toBeVisible();
+  await page.getByRole('button',{name:'Agregar estudiante',exact:true}).click();const editor=page.getByRole('dialog',{name:'Nuevo estudiante'});await expect(editor).toBeVisible();await editor.getByRole('button',{name:'Cerrar editor'}).click();await expect(editor).not.toBeVisible();
+  await search(page).fill('100002');await expect(page.getByRole('article')).toHaveCount(1);await expect(search(page)).toBeFocused();
+  await page.setViewportSize({width:390,height:844});await search(page).evaluate(element=>window.scrollTo({top:element.getBoundingClientRect().top+window.scrollY-100,behavior:'instant'}));await page.screenshot({path:'artifacts/ui-preview/distribution-mobile-search-results-first.png',animations:'disabled'});
+  await page.setViewportSize({width:1440,height:1000});await expect(page.getByRole('article')).toHaveCount(1);await expect(page.getByLabel('N\u00fameros de ticket')).toHaveValue('1400-1402');
+  await page.setViewportSize({width:390,height:844});await search(page).fill('');await expect(page.getByRole('article')).toHaveCount(3);await expect(page.getByLabel('N\u00fameros de ticket')).toHaveValue('1400-1402');
+  expect(state.calls.filter(call=>call.method!=='GET')).toHaveLength(0);
+});

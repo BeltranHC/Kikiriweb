@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
-import { Ticket, Users, UserPlus, Pencil, RefreshCw, Upload, CheckCircle, Search, History, X, Download } from 'lucide-react';
+import { Ticket, Users, UserPlus, Pencil, RefreshCw, Upload, CheckCircle, History, X, Download } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
-import Pagination from '@/components/Pagination';
+import DirectoryResults from '@/components/DirectoryResults';
 import StudentEditor from '@/components/StudentEditor';
 import TicketEditor from '@/components/TicketEditor';
 import FacultyImport from '@/components/FacultyImport';
@@ -54,6 +54,7 @@ export default function DistributionPage() {
   const changeType = value => { setType(value); setSemester('all'); setPage(1); };
   const changeTicketStatus = value => { setTicketStatus(value); setPage(1); };
   const clearFilters = () => { setSemester('all'); setType('all'); setTicketStatus('all'); setQuery(''); };
+  const hasSearch = query.trim().length > 0;
   const hasFilters = !!query || semester !== 'all' || type !== 'all' || ticketStatus !== 'all';
   const savedTicket = result => {
     setSelected(previous => previous?.id === result.previousStudentId ? {...previous,tickets:previous.tickets.filter(ticket => ticket.id !== result.ticket.id).concat(result.ticket.student_id === previous.id ? [result.ticket] : []).sort((a,b)=>a.ticket_number-b.ticket_number)} : previous);
@@ -90,6 +91,8 @@ export default function DistributionPage() {
     } catch (error) { toast.error(error.message); }
     finally { setExporting(false); }
   };
+  const resultProps = { directory, page, onPageChange: setPage, selected, assignmentClosed, saving, confirming,
+    onEdit: student => setEditor({ student }), onChoose: choose };
   return <div className={styles.page}>
     <header className={styles.header}><div><span className={styles.eyebrow}>FACULTAD · PADRÓN Y ASIGNACIONES</span><h1>Reparto de tickets</h1><p>Busca al estudiante, confirma sus datos y registra los tickets que recibe.</p></div>
       <div className={styles.actions} role="group" aria-label="Acciones del padrón">
@@ -102,6 +105,7 @@ export default function DistributionPage() {
     <section ref={directoryPanel} className={styles.directorySearch} aria-label="Buscar en el padrón">
         <div className={styles.directoryHeading}><div><h2>Buscar en el padrón</h2><p>Usa Editar datos para corregir el nombre, código, semestre o escuela de un estudiante.</p></div><button type="button" className="btn btn-secondary btn-sm" disabled={directory.loading} onClick={directory.refresh} aria-label="Actualizar padrón"><RefreshCw size={16} /></button></div>
         <SearchBar value={query} onSearch={setQuery} placeholder="Buscar por código, nombres o apellidos" />
+        {hasSearch && <DirectoryResults {...resultProps} className={styles.inlineResults} />}
         <DirectoryFilters directory={directory} semester={semester} type={type} ticketStatus={ticketStatus} hasFilters={hasFilters}
           onSemesterChange={changeSemester} onTypeChange={changeType} onTicketStatusChange={changeTicketStatus} onClear={clearFilters} />
     </section>
@@ -112,22 +116,7 @@ export default function DistributionPage() {
     </section>
     {importing && <FacultyImport onImported={directory.refresh} onClose={() => setImporting(false)} />}
     <div className={`${styles.workspace} ${assignmentClosed ? styles.workspaceClosed : ''}`}>
-      <section className={styles.directory} aria-busy={directory.loading} aria-label="Padrón por semestre">
-        <p className={styles.resultCount} role="status">{directory.loading ? 'Buscando estudiantes...' : `${directory.total} estudiantes encontrados`}</p>
-        {directory.error && <div role="alert" className={styles.error}><p>{directory.error}</p><button type="button" className="btn btn-secondary btn-sm" onClick={directory.refresh}>Reintentar</button></div>}
-        {!directory.error && directory.students.length === 0 && !directory.loading && <div className="empty-state"><Search size={34} /><h3>No encontramos estudiantes</h3><p>Prueba otro nombre o código, cambia los filtros o agrega al estudiante.</p><button className="btn btn-primary" type="button" onClick={() => setEditor({ student: null })}>Agregar estudiante</button></div>}
-        <div className={styles.students}>{directory.students.map((student, index) => {
-          const previous = directory.students[index - 1];
-          const groupStart = index === 0 || previous.semester !== student.semester || previous.recipient_type !== student.recipient_type;
-          return <div key={student.id}>{groupStart && <h3 className={styles.groupHeading}>{recipientLabel(student)}</h3>}
-            <article className={`${styles.student} ${selected?.id === student.id ? styles.selected : ''}`} aria-label={`${student.name}, ${student.code || 'sin código'}`}>
-              <div className={styles.studentInfo}><strong>{student.name}</strong><div><span className={styles.code}>{student.code || 'Sin código'}</span><span>{student.school || 'Escuela sin confirmar'}</span></div><p>{student.tickets?.length || 0} tickets asignados{student.tickets?.length > 0 && ` · ${student.tickets.slice(0, 5).map(ticket => `#${ticket.ticket_number}`).join(', ')}${student.tickets.length > 5 ? '…' : ''}`}</p></div>
-              <div className={styles.studentActions}><button type="button" className="btn btn-secondary btn-sm" aria-label={`Editar a ${student.name}`} title="Editar nombre, código, semestre y escuela" onClick={() => setEditor({ student })} disabled={saving}><Pencil size={15} /><span>Editar datos</span></button><button type="button" className={`btn ${selected?.id === student.id ? 'btn-secondary' : 'btn-primary'} btn-sm`} onClick={() => choose(student)} disabled={saving || confirming}>{selected?.id === student.id ? (assignmentClosed ? 'Continuar asignación' : 'Seleccionado') : 'Asignar tickets'}</button></div>
-            </article>
-          </div>;
-        })}</div>
-        <Pagination page={page} total={directory.total} hasMore={directory.hasMore} loading={directory.loading} onPageChange={setPage} />
-      </section>
+      <DirectoryResults {...resultProps} className={hasSearch ? styles.belowSearchResults : ''} />
       <aside ref={assignmentPanel} hidden={assignmentClosed} className={styles.assignment} aria-label="Asignar tickets al estudiante">
         <div className={styles.assignmentTitle}><span><Ticket size={21} aria-hidden="true" /></span><div><h2>Asignar tickets</h2><p>Registra la entrega del talonario</p></div><button type="button" className={`btn btn-secondary btn-sm ${styles.panelClose}`} onClick={closeAssignment} disabled={saving || confirming} aria-label="Cerrar asignación"><X size={17} aria-hidden="true" />Cerrar</button></div>
         {!selected ? <div className={styles.selectHint}><Users size={38} /><h3>Selecciona un estudiante</h3><p>Busca su código o nombre en el padrón y elige “Asignar tickets”.</p></div> : <>
