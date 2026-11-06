@@ -7,6 +7,7 @@ import * as csv from '../lib/csv.mjs';
 import { fetchAll } from '../lib/pagination.mjs';
 import { cashReport } from '../lib/report.mjs';
 import * as faculty from '../lib/faculty.mjs';
+import * as batchPayments from '../lib/ticket-payments.mjs';
 import * as facultyExport from '../lib/faculty-export.mjs';
 import * as assignmentHistory from '../lib/assignment-history.mjs';
 import { requireDeliveryEnabled } from '../lib/module-mode.mjs';
@@ -19,7 +20,7 @@ async function compile(path, dependencies, exports) {
 async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
   const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
-  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
+  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...batchPayments, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
 }
 for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
@@ -305,4 +306,12 @@ test('Historical batches whose participant no longer exists remain readable with
  const client={...authenticated(),from(table){assert.equal(table,'ticket_assignments');return{select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:user.id,student_id:null}})};}};
  const response=await(await handlers('faculty/tickets',client)).GET({url:'http://localhost/api/faculty/tickets?assignmentId='+user.id});
  assert.equal(response.status,200);assert.deepEqual((await response.json()).tickets,[]);
+});
+
+
+test('Batch payments validate all identities, versions and amounts before one transactional RPC and ignore claimed actors',async()=>{
+ const calls=[];const route=await handlers('faculty/payments',authenticated(async(name,args)=>{calls.push({name,args});return{data:{changed:2,total:30},error:null};}));
+ const payload={studentId:user.id,tickets:[{id:user.id,updated_at:'2026-11-06T10:00:00Z'}],condition:'cash',expectedTotal:15,actorId:'forged'};
+ for(const value of [null,'invalid',{...payload,tickets:[]},{...payload,tickets:[...payload.tickets,...payload.tickets]},{...payload,condition:'card'},{...payload,expectedTotal:-1},{...payload,expectedTotal:15.001}])assert.equal((await route.PATCH({json:async()=>value})).status,400);
+ assert.equal(calls.length,0);assert.equal((await route.PATCH({json:async()=>payload})).status,200);assert.equal(calls.length,1);assert.equal(calls[0].name,'set_faculty_ticket_payments');assert.equal(calls[0].args.p_expected_total,15);assert.equal('actorId' in calls[0].args,false);
 });

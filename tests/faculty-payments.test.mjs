@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 const files=['database.sql','20261031_faculty_distribution.sql','20261031_promotion_category.sql','20261031_distribution_only_history.sql','20261103_recipient_ticket_changes.sql','20261104_directory_performance.sql','20261104_semester_progress.sql','20261105_distribution_payments_deletion.sql'];
 const migrations=await Promise.all(files.map(file=>readFile(new URL('../'+(file==='database.sql'?'':'supabase/migrations/')+file,import.meta.url),'utf8')));
+const batchMigration=await readFile(new URL('../supabase/migrations/20261106_batch_ticket_payments.sql',import.meta.url),'utf8');
 const actor='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 
 test('Distribution payments and deletions preserve history, enforce reversal before deletion and work for every signed-in operator',async t=>{
@@ -99,6 +100,39 @@ test('Distribution payments and deletions preserve history, enforce reversal bef
     try{await assert.rejects(db.exec(altered),error=>error.code==='P0001'&&/Verificacion fallida/.test(error.message));}finally{await db.exec('ROLLBACK');}
     assert.deepEqual(await Promise.all(guardedTables.map(rows)),before);
    }
+  });
+  const batch=async(person,tickets,condition,total)=>(await q('SELECT public.set_faculty_ticket_payments($1,$2,$3,$4) v',[person.id,JSON.stringify(tickets.map(ticket=>({id:ticket.id,updated_at:ticket.assignment_updated_at}))),condition,total]))[0].v;
+  await t.test('Installing and reapplying batch payments preserves every existing row and historical assignment',async()=>{
+   const names=[...tables,'faculty_payments'];const before=await Promise.all(names.map(rows));await db.exec(batchMigration);await db.exec(batchMigration);assert.deepEqual(await Promise.all(names.map(rows)),before);
+  });
+  await run('A grouped payment uses individual prices, skips already paid tickets, audits the operator and preserves pickup and assignment state',async()=>{
+   const person=await save('BATCH');const assigned=await assign(person,[8100,8101,8102]);await payment(person,assigned.tickets[2],'pay','yape');
+   await q('UPDATE public.tickets SET unit_price=CASE WHEN ticket_number=8100 THEN 12.50 ELSE 17.25 END WHERE ticket_number IN(8100,8101)');
+   const tickets=await Promise.all(assigned.tickets.map(fresh));const history=await rows('ticket_assignments');await login(other);const result=await batch(person,tickets,'cash',29.75);
+   assert.equal(result.changed,2);assert.equal(result.unchanged,1);assert.equal(result.total,29.75);assert(result.tickets.every(ticket=>ticket.is_paid&&!ticket.is_picked_up));assert.equal(result.tickets.find(t=>t.ticket_number===8102).payment_method,'en_momento_yape|first@example.test');
+   const events=(await rows('faculty_payments')).map(row=>row.v).filter(event=>assigned.tickets.some(ticket=>ticket.id===event.ticket_id));assert.equal(events.length,3);assert.equal(events.filter(event=>event.actor_id===other).length,2);assert.deepEqual(await rows('ticket_assignments'),history);
+   const again=await batch(person,result.tickets,'cash',0);assert.equal(again.changed,0);assert.equal((await rows('faculty_payments')).filter(row=>assigned.tickets.some(ticket=>ticket.id===row.v.ticket_id)).length,3);
+  });
+  await run('Pending reverses the selected original amounts together and leaves other tickets and assignments unchanged',async()=>{
+   const person=await save('PENDING');const assigned=await assign(person,[8200,8201,8202],'yape');const history=await rows('ticket_assignments');
+   await q('UPDATE public.tickets SET unit_price=99 WHERE ticket_number=8200');const selected=await Promise.all(assigned.tickets.slice(0,2).map(fresh));const result=await batch(person,selected,'pending',30);
+   assert.equal(result.changed,2);assert.equal(result.total,30);assert(result.tickets.every(ticket=>!ticket.is_paid&&ticket.student_id===person.id));assert.equal((await fresh(assigned.tickets[2])).is_paid,true);assert.deepEqual(await rows('ticket_assignments'),history);
+   assert.equal((await rows('faculty_payments')).filter(row=>row.v.kind==='void').length,2);assert.equal((await batch(person,result.tickets,'pending',0)).changed,0);
+  });
+  await run('A stale version, wrong total or mixed owner cancels every payment in the selection',async()=>{
+   const person=await save('CONFLICT'),otherPerson=await save('OTHER');const tickets=(await assign(person,[8300,8301])).tickets;const extra=(await assign(otherPerson,[8302])).tickets[0];
+   const before=await rows('faculty_payments');await reject(()=>batch(person,tickets,'cash',1));await reject(()=>batch(person,[tickets[0],extra],'cash',30));await payment(person,tickets[1]);await reject(()=>batch(person,tickets,'cash',30));
+   assert.equal((await fresh(tickets[0])).is_paid,false);assert.equal((await rows('faculty_payments')).length,before.length+1);
+  });
+  await run('A failure during the second grouped payment rolls back the first payment, its ledger and audit events',async()=>{
+   const person=await save('BATCH-ROLLBACK');const tickets=(await assign(person,[8400,8401])).tickets.sort((a,b)=>a.id.localeCompare(b.id));const before=await Promise.all(['tickets','faculty_payments','faculty_changes'].map(rows));
+   await db.exec(`CREATE FUNCTION public.reject_batch_test() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF NEW.ticket_id='${tickets[1].id}'::uuid THEN RAISE EXCEPTION 'test failure';END IF;RETURN NEW;END$$;CREATE TRIGGER reject_batch_test BEFORE INSERT ON public.faculty_payments FOR EACH ROW EXECUTE FUNCTION public.reject_batch_test()`);
+   await reject(()=>batch(person,tickets,'cash',30));assert.deepEqual(await Promise.all(['tickets','faculty_payments','faculty_changes'].map(rows)),before);
+  });
+  await run('Grouped payments remain available to both authenticated operators and reject anonymous accounts and invalid selections',async()=>{
+   await db.exec('SET ROLE authenticated');await login(other);const person=await save('BATCH-AUTH');const tickets=(await assign(person,[8500,8501])).tickets;
+   await reject(()=>batch(person,[tickets[0],tickets[0]],'cash',30),'22023');const paid=await batch(person,tickets,'yape',30);assert.equal(paid.changed,2);
+   await q("SELECT set_config('request.jwt.claims','{\"is_anonymous\":true}',true)");await reject(()=>batch(person,paid.tickets,'pending',30),'42501');await db.exec('RESET ROLE;SET ROLE anon');await reject(()=>batch(person,paid.tickets,'pending',30),'42501');
   });
  }finally{await db.close();}
 });

@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ticket, Users, UserPlus, Pencil, RefreshCw, Upload, CheckCircle, History, X, Download, Trash2 } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
 import DirectoryResults from '@/components/DirectoryResults';
 import StudentEditor from '@/components/StudentEditor';
+import TicketPayments from '@/components/TicketPayments';
 import TicketEditor from '@/components/TicketEditor';
 import FacultyImport from '@/components/FacultyImport';
 import DirectoryFilters from '@/components/DirectoryFilters';
@@ -24,8 +25,9 @@ export default function DistributionPage() {
   const [type, setType] = useState('all');
   const [ticketStatus, setTicketStatus] = useState('all');
   const [ticketEditor, setTicketEditor] = useState(null);
+  const [paymentGroup,setPaymentGroup] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [assignmentClosed, setAssignmentClosed] = useState(false);
+  const [assignmentClosed, setAssignmentClosed] = useState(true);
   const [editor, setEditor] = useState(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -39,20 +41,26 @@ export default function DistributionPage() {
   const [receipt, setReceipt] = useState(null);
   const directory = useFacultyDirectory(query, page, semester, ready, type, ticketStatus);
   const toast = useToast();
-  const assignmentPanel = useRef(null);
+  const assignmentDialog = useRef(null);
   const directoryPanel = useRef(null);
   const parsed = useMemo(() => { try { return { numbers: parseTicketNumbers(numberText), error: '' }; } catch (error) { return { numbers: [], error: error.message }; } }, [numberText]);
-  const scrollToPanel = panel => {
-    if (window.matchMedia('(max-width: 1000px)').matches) requestAnimationFrame(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  const assignmentOpen = !!selected && !assignmentClosed;
+  useEffect(() => {
+    if (assignmentOpen) assignmentDialog.current?.showModal();
+    else assignmentDialog.current?.close();
+  }, [assignmentOpen]);
+  const savedPayments = result => {
+    setSelected(previous => previous?.id === result.studentId ? { ...previous, tickets: previous.tickets.map(ticket => result.tickets.find(updated=>updated.id===ticket.id) || ticket) } : previous);
+    setReceipt(null);directory.refresh();toast.success(`${result.changed} tickets actualizados - S/ ${Number(result.total).toFixed(2)}`);
   };
   const choose = student => {
     if (saving || confirming) return;
     if (selected?.id !== student.id) { setNumberText(''); setPaymentMethod('pending'); setSaveError(''); setReceipt(null); }
-    setSelected(student); setAssignmentClosed(false); scrollToPanel(assignmentPanel);
+    setSelected(student); setAssignmentClosed(false);
   };
   const closeAssignment = () => {
     if (saving || confirming) return;
-    setAssignmentClosed(true); scrollToPanel(directoryPanel);
+    setAssignmentClosed(true);
   };
   const changeSemester = value => { setSemester(value); setType(value === 'all' ? 'all' : 'student'); setPage(1); };
   const changeType = value => { setType(value); setSemester('all'); setPage(1); };
@@ -66,7 +74,7 @@ export default function DistributionPage() {
   };
   const savedStudent = student => {
     setSelected(previous => !editor?.student || previous?.id === student.id ? { ...previous, ...student, tickets: previous?.id === student.id ? previous.tickets : [] } : previous);
-    if (!editor?.student) { setNumberText(''); setPaymentMethod('pending'); setSaveError(''); setReceipt(null); setAssignmentClosed(false); scrollToPanel(assignmentPanel); }
+    if (!editor?.student) { setNumberText(''); setPaymentMethod('pending'); setSaveError(''); setReceipt(null); setAssignmentClosed(false);  }
     toast.success('Datos del estudiante guardados'); directory.refresh();
   };
   const assign = async () => {
@@ -132,13 +140,15 @@ export default function DistributionPage() {
       <div><Ticket size={21} /><span>Tickets repartidos<strong>{directory.summary.totalAssignedTickets ?? '—'}</strong><small>Incluye Promoción</small></span></div>
     </section>
     {importing && <FacultyImport onImported={directory.refresh} onClose={() => setImporting(false)} />}
-    <div className={`${styles.workspace} ${assignmentClosed ? styles.workspaceClosed : ''}`}>
+    <div className={styles.workspace}>
       <DirectoryResults {...resultProps} className={hasSearch ? styles.belowSearchResults : ''} />
-      <aside ref={assignmentPanel} hidden={assignmentClosed} className={styles.assignment} aria-label="Asignar tickets al estudiante">
-        <div className={styles.assignmentTitle}><span><Ticket size={21} aria-hidden="true" /></span><div><h2>Asignar tickets</h2><p>Registra la entrega del talonario</p></div><button type="button" className={`btn btn-secondary btn-sm ${styles.panelClose}`} onClick={closeAssignment} disabled={saving || confirming} aria-label="Cerrar asignación"><X size={17} aria-hidden="true" />Cerrar</button></div>
+    </div>
+    <dialog ref={assignmentDialog} className={`modal-content ${styles.assignmentDialog}`} aria-labelledby="assignment-modal-title" onCancel={event=>{event.preventDefault();closeAssignment();}}>
+      <aside hidden={assignmentClosed} className={styles.assignment} aria-label="Asignar tickets al estudiante">
+        <div className={styles.assignmentTitle}><span><Ticket size={21} aria-hidden="true" /></span><div><h2 id="assignment-modal-title">Asignar tickets</h2><p>Registra la entrega del talonario</p></div><button type="button" className={`btn btn-secondary btn-sm ${styles.panelClose}`} onClick={closeAssignment} disabled={saving || confirming} aria-label="Cerrar asignación"><X size={17} aria-hidden="true" />Cerrar</button></div>
         {!selected ? <div className={styles.selectHint}><Users size={38} /><h3>Selecciona un estudiante</h3><p>Busca su código o nombre en el padrón y elige “Asignar tickets”.</p></div> : <>
           <div className={styles.recipient}><span className={styles.eyebrow}>PERSONA SELECCIONADA</span><h3>{selected.name}</h3><p><strong>{selected.code || 'Sin código'}</strong> · {recipientLabel(selected)}</p><button type="button" className={styles.editLink} onClick={() => setEditor({ student: selected })} disabled={saving}><Pencil size={13} />Editar datos del estudiante</button><button type="button" className={`${styles.editLink} ${styles.deleteLink}`} onClick={() => requestDelete(selected)} disabled={saving}><Trash2 size={13} />Eliminar participante</button></div>
-          {(selected.tickets?.length || 0) > 0 && <details className={styles.existing}><summary>{selected.tickets.length} tickets asignados · Ver y editar</summary><ul className={styles.assignedTickets}>{selected.tickets.map(ticket => <li key={ticket.id}><span>#{ticket.ticket_number}</span><span className={ticket.is_paid ? styles.paymentSummary : styles.help}>{ticket.is_paid ? `Pagado: ${parsePayment(ticket.payment_method).label}` : 'Pendiente de pago'}</span><button type="button" className="btn btn-secondary btn-sm" aria-label={`Editar ticket ${ticket.ticket_number}`} disabled={(!ticket.can_edit && !ticket.can_manage) || saving} onClick={() => setTicketEditor({ticket,student:selected})}><Pencil size={14} aria-hidden="true" />Editar</button>{!ticket.can_edit && !ticket.can_manage && <small>{ticket.can_edit === false ? 'Protegido por pago o entrega' : 'Edición pendiente de activación'}</small>}</li>)}</ul></details>}
+          {(selected.tickets?.length || 0) > 0 && <details className={styles.existing}><summary>{selected.tickets.length} tickets asignados · Ver y editar</summary><button type="button" className="btn btn-secondary btn-sm" onClick={()=>setPaymentGroup({student:selected,tickets:selected.tickets})} disabled={saving}>Pagar varios tickets</button><ul className={styles.assignedTickets}>{selected.tickets.map(ticket => <li key={ticket.id}><span>#{ticket.ticket_number}</span><span className={ticket.is_paid ? styles.paymentSummary : styles.help}>{ticket.is_paid ? `Pagado: ${parsePayment(ticket.payment_method).label}` : 'Pendiente de pago'}</span><button type="button" className="btn btn-secondary btn-sm" aria-label={`Editar ticket ${ticket.ticket_number}`} disabled={(!ticket.can_edit && !ticket.can_manage) || saving} onClick={() => setTicketEditor({ticket,student:selected})}><Pencil size={14} aria-hidden="true" />Editar</button>{!ticket.can_edit && !ticket.can_manage && <small>{ticket.can_edit === false ? 'Protegido por pago o entrega' : 'Edición pendiente de activación'}</small>}</li>)}</ul></details>}
           <form className={styles.assignmentForm} onSubmit={event => { event.preventDefault(); if (parsed.numbers.length && !parsed.error) setConfirming(true); }} data-mutation-pending={saving ? 'true' : 'false'}>
             <div className="input-group"><label htmlFor="assignment-numbers">Números de ticket</label><textarea id="assignment-numbers" className="input-field" rows={3} maxLength={24000} value={numberText} onChange={event => { setNumberText(event.target.value); setSaveError(''); }} disabled={saving} placeholder="Ej.: 1050, 1052, 1060-1065" aria-describedby="assignment-help" /></div>
             <p id="assignment-help" className={styles.help}>Separa números con comas o espacios. Para números consecutivos, usa un rango como 1060-1065.</p>
@@ -154,9 +164,10 @@ export default function DistributionPage() {
         </>}
         {receipt && <div role="status" className={styles.success}><CheckCircle size={21} /><div><strong>Asignación guardada</strong><p>{receipt.name}: {receipt.numbers.map(number => `#${number}`).join(', ')}</p>{receipt.paymentMethod && <p>Pago registrado: {FACULTY_PAYMENT_LABELS[receipt.paymentMethod]} · S/ {Number(receipt.paymentTotal).toFixed(2)}</p>}</div></div>}
       </aside>
-    </div>
+    </dialog>
     <ConfirmModal isOpen={!!deletingStudent} title="Eliminar participante" confirmText="Eliminar participante" confirmDisabled={deletePaidCount > 0} error={deleteError}
       onConfirm={deleteStudent} onCancel={() => setDeletingStudent(null)} message={deletePaidCount > 0 ? `${deletionName} tiene ${deletePaidCount} ${deletePaidCount === 1 ? 'ticket pagado' : 'tickets pagados'}. Anula esos pagos antes de eliminar al participante.` : `Eliminar a ${deletionName} del padrón y retirar ${deleteTicketCount} ${deleteTicketCount === 1 ? 'ticket asignado' : 'tickets asignados'}. Se conservarán el historial y el usuario responsable.`} />
+    <TicketPayments value={paymentGroup} onClose={()=>setPaymentGroup(null)} onSaved={savedPayments} />
     <TicketEditor value={ticketEditor} onClose={() => setTicketEditor(null)} onSaved={savedTicket} />
     <StudentEditor open={!!editor} student={editor?.student} onClose={() => setEditor(null)} onSaved={savedStudent} />
     <ConfirmModal isOpen={confirming} title="Confirmar asignación" isDanger={false} confirmText="Confirmar y asignar" onConfirm={assign} onCancel={() => setConfirming(false)}

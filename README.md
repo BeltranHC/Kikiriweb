@@ -237,3 +237,11 @@ Antes de reactivar Entregas hay que adaptar sus consultas para excluir los elimi
 Desde el historial de asignaciones, Editar / pagos abre los tickets que siguen activos en el lote y usa los mismos pagos, anulaciones y correcciones auditados de Reparto. Consulta por ID de lote y ticket actual, sin modificar las instantaneas originales ni operar sobre numeros historicos que pudieron reutilizarse. No requiere otra migracion.
 
 Los cobros de Reparto se conservan en faculty_payments y en el estado del ticket. Antes de reactivar Entregas, adaptar la caja para mostrar saldo acumulado y cobros del dia por separado, restar anulaciones y evitar contar nuevamente un pago al entregar. El calculo antiguo ticket_stats solo cuenta entregas del dia; no representa el dinero acumulado de Reparto. Entregas permanece inhabilitado.
+
+## Asignacion en modal y pagos conjuntos
+
+La accion Asignar tickets abre un dialogo en escritorio y movil. Cerrar o pulsar Escape conserva el buscador y el borrador de la misma persona. Al cambiar de persona se limpia el borrador para evitar asignarlo al destinatario anterior.
+
+En los tickets existentes de Reparto y en el historial, Pagar varios tickets permite seleccionar parte o todos los tickets pendientes, ver la suma y confirmar un pago conjunto en efectivo o Yape. La condicion Pendiente de pago anula los pagos seleccionados con confirmacion; no elimina asignaciones ni eventos anteriores. Los tickets ya pagados no se cobran otra vez y los ya pendientes no generan movimientos vacios.
+
+Requiere ejecutar completo supabase/migrations/20261106_batch_ticket_payments.sql (copia privada: artifacts/faculty-roster/activar_pagos_en_grupo.sql). Instalar la funcion no ejecuta pagos y compara las filas existentes antes de confirmar la migracion. La operacion conjunta bloquea y verifica todos los tickets y sus versiones antes de mutar, comprueba el total contra los precios guardados y conserva importes originales al anular. Cualquier error revierte pagos, auditoria y estado del grupo completo. Entregas sigue bloqueado.

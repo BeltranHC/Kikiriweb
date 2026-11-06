@@ -11,7 +11,7 @@
 .metrics svg { color: var(--primary); flex-shrink: 0; }
 .metrics span { color: var(--text-secondary); font-size: .77rem; }
 .metrics strong { display: block; font-size: 1.8rem; color: var(--text-primary); margin-top: 3px; line-height: 1.2; }
-.workspace { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(300px,1fr); align-items: start; gap: 24px; }
+.workspace { display: grid; grid-template-columns: minmax(0,1fr); align-items: start; gap: 24px; }
 .workspaceClosed { grid-template-columns: minmax(0,1fr); }
 .directory { min-width: 0; scroll-margin-top: 88px; }
 .directoryHeading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 18px; align-items: center; }
@@ -98,3 +98,11 @@
 .ticketState small { flex-basis: 100%; color: var(--text-tertiary); overflow-wrap: anywhere; }
 .warning { background: var(--warning-bg); color: var(--warning); padding: 12px; border-radius: 9px; font-size: .82rem; }
 @media (max-width: 640px) { .deleteStudent { min-height: 44px; min-width: 44px; } }
+
+.assignmentDialog { padding: 0; width: min(720px, calc(100vw - 24px)); max-width: 720px; max-height: 90dvh; overflow: auto; }
+.assignmentDialog .assignment { position: static; border: 0; border-radius: 0; }
+.existing > button { margin-top: 12px; min-height: 44px; }
+
+.assignmentDialog { margin: auto; }
+.assignmentDialog::backdrop { background: rgba(0,0,0,.65); backdrop-filter: blur(4px); }
+.assignmentDialog .assignmentTitle { position: sticky; top: 0; z-index: 1; background: var(--bg-secondary); padding-top: 8px; }
