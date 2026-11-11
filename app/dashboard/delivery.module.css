@@ -27,3 +27,20 @@
 .filters > div { display: grid; gap: 6px; flex: 1; min-width: 0; }
 .filters select { width: 100%; min-width: 0; }
 .filters > button { flex-shrink: 0; align-self: flex-end; }
+
+.pickupStats { display: grid; gap: 14px; padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
+.pickupCards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.pickupCards article { display: grid; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border-color); border-radius: 12px; }
+.pickupCards article > span { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: .85rem; font-weight: 600; }
+.pickupCards svg { flex-shrink: 0; }
+.pickupCards strong { font-size: clamp(1.75rem,4vw,2.25rem); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pickupCards .collected { background: var(--success-bg); border-color: var(--success-border); }
+.collected svg, .collected strong { color: var(--success-light); }
+.pickupCards .remaining { background: var(--warning-bg); border-color: var(--warning-border); }
+.remaining svg, .remaining strong { color: var(--warning-light); }
+.pickupProgress { display: grid; gap: 8px; }
+.pickupProgress p { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin: 0; color: var(--text-secondary); font-size: .8rem; }
+.pickupProgress p > span:last-child { color: var(--primary); font-weight: 600; }
+.pickupTrack { height: 8px; background: var(--bg-tertiary); border-radius: 99px; overflow: hidden; }
+.pickupTrack > div { height: 100%; background: var(--success); border-radius: inherit; transition: width 250ms ease; }
+@media(max-width:450px) { .pickupStats { padding: 12px; } .pickupCards { gap: 8px; } .pickupCards article { padding: 12px; } .pickupCards article > span { gap: 6px; font-size: .75rem; } }

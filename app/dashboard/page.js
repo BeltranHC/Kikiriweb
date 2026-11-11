@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw, Download, History, X, CheckCircle, ScanBarcode } from 'lucide-react';
+import { RefreshCw, Download, History, X, CheckCircle, ScanBarcode, Clock } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
 import StudentCard from '@/components/StudentCard';
 import StatsPanel from '@/components/StatsPanel';
@@ -15,7 +15,9 @@ import { useToast } from '@/components/Toast';
 import { request,requestJson,jsonBody } from '@/lib/client';
 import { deliverySelection } from '@/lib/delivery.mjs';
 import { localDate } from '@/lib/domain.mjs';
+import { percentage } from '@/lib/utils';
 import styles from './delivery.module.css';
+const number=new Intl.NumberFormat('es-PE');
 const money=value=>new Intl.NumberFormat('es-PE',{style:'currency',currency:'PEN'}).format(value||0);
 export default function DashboardPage(){
  const {query,page,ready,setQuery,setPage}=useSearchState('dashboard');const [status,setStatus]=useState('all');
@@ -23,6 +25,7 @@ export default function DashboardPage(){
  const [scanner,setScanner]=useState(false);const [confirming,setConfirming]=useState(false);const [method,setMethod]=useState('cash');const [busy,setBusy]=useState(false);const [error,setError]=useState('');
  const [undo,setUndo]=useState(null);const [undoError,setUndoError]=useState('');const [exporting,setExporting]=useState(false);const dialog=useRef(null);const searchInput=useRef(null);const toast=useToast();
  const summary=useMemo(()=>deliverySelection(selected),[selected]);
+ const pickupPercent=percentage(stats?.pickedUp,stats?.totalTickets);
  const fetchStats=useCallback(async(signal)=>{try{setStats(await requestJson('/api/stats',{signal}));}catch(issue){if(!signal?.aborted&&issue.status!==401)toast.error(issue.message);}},[toast]);
  useEffect(()=>{const controller=new AbortController();fetchStats(controller.signal);return()=>controller.abort();},[fetchStats]);
  useAutoRefresh(()=>{directory.refresh({silent:true,background:true});fetchStats();},{enabled:ready&&!selected.length&&!confirming});
@@ -41,6 +44,15 @@ export default function DashboardPage(){
    <button className="btn btn-secondary btn-sm" onClick={()=>{directory.refresh({silent:true});fetchStats();}} disabled={directory.refreshing}><RefreshCw size={16}/>Actualizar</button>
    <Link className="btn btn-secondary btn-sm" href="/movements"><History size={16}/>Movimientos</Link><button className="btn btn-secondary btn-sm" onClick={exportCash} disabled={exporting}><Download size={16}/>Exportar caja de hoy</button>
   </div></header>
+  <section className={styles.pickupStats} aria-label="Estadísticas de tickets" aria-busy={!stats}>
+   <div className={styles.pickupCards}>
+    <article className={styles.collected} aria-label="Tickets recogidos"><span><CheckCircle size={19} aria-hidden="true"/>Tickets recogidos</span><strong>{stats?number.format(stats.pickedUp):'...'}</strong></article>
+    <article className={styles.remaining} aria-label="Faltan recoger"><span><Clock size={19} aria-hidden="true"/>Faltan recoger</span><strong>{stats?number.format(stats.pending):'...'}</strong></article>
+   </div>
+   <div className={styles.pickupProgress}><p><span>Total: <strong>{stats?number.format(stats.totalTickets):'...'}</strong> tickets</span><span>{stats?`${pickupPercent}% recogido`:'Cargando...'}</span></p>
+    <div className={styles.pickupTrack} role="progressbar" aria-label="Avance de recojo" aria-valuemin={0} aria-valuemax={100} aria-valuenow={stats?pickupPercent:undefined} aria-valuetext={stats?`${number.format(stats.pickedUp)} de ${number.format(stats.totalTickets)} tickets recogidos`:undefined}><div style={{width:`${pickupPercent}%`}}/></div>
+   </div>
+  </section>
   <section className={styles.cash} aria-label="Caja de entregas"><article><span>Acumulado registrado</span><strong>{stats?money(stats.collectedTotal):'...'}</strong><small>Efectivo {money(stats?.collectedCashTotal)} / Yape {money(stats?.collectedYapeTotal)}</small>{Number(stats?.collectedOtherTotal)!==0&&stats&&<small>Otros medios previos: {money(stats.collectedOtherTotal)}</small>}</article>
    <article><span>Neto de hoy</span><strong>{stats?money(stats.collectedNow):'...'}</strong><small>Incluye Reparto y Entregas; descuenta anulaciones de pago.</small></article></section>
   {stats?.legacyWithoutDate>0&&<p className={styles.help}>{stats.legacyWithoutDate} pagos antiguos no tienen fecha registrada: se incluyen en el acumulado.</p>}
