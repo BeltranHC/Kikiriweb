@@ -2,10 +2,11 @@
 import { Banknote, Smartphone, Clock3, CheckCircle } from 'lucide-react';
 import styles from './PaymentOptions.module.css';
 
-export default function PaymentOptions({ label, value, onChange, disabled = false, allowPending = false, disabledMethods = [], recordedLabel }) {
+export default function PaymentOptions({ label, value, onChange, disabled = false, allowPending = false, allowPrepaid = false, disabledMethods = [], recordedLabel }) {
   const options = [
     { value: 'cash', label: 'Efectivo', Icon: Banknote },
     { value: 'yape', label: 'Yape', Icon: Smartphone },
+    ...(allowPrepaid ? [{ value: 'prepaid', label: 'Prepagado', Icon: CheckCircle }] : []),
     ...(allowPending ? [{ value: 'pending', label: 'Pendiente de pago', Icon: Clock3 }] : []),
     ...(recordedLabel ? [{ value: 'recorded', label: recordedLabel, Icon: CheckCircle }] : []),
   ];

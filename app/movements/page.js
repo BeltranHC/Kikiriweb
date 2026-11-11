@@ -80,7 +80,7 @@ function LegacyMovementsPage() {
             </div>
           </td>
           <td>{new Date(event.created_at).toLocaleString('es-PE', { timeZone: APP_TIME_ZONE })}</td>
-          <td>{isUndo ? 'Entrega anulada' : total ? `Cobrado en esta entrega: S/ ${total}` : 'Pagado previamente; sin cobro nuevo'}</td>
+          <td>{isUndo ? 'Entrega anulada' : total ? `Cobrado en esta entrega: S/ ${total}` : event.payment_method==='prepaid' ? 'Prepagado; sin cobro nuevo' : 'Pagado previamente; sin cobro nuevo'}</td>
           <td>{event.actor_email || 'Desconocido'}</td><td><span className={`badge ${isUndo || !event.activeTicketIds.length ? 'badge-warning' : 'badge-success'}`}>{status}</span></td>
           <td>{!isUndo && event.activeTicketIds.length > 0 && <button className="btn btn-danger btn-sm" onClick={() => setUndo(event)}><Undo2 size={14} /> Anular {event.activeTicketIds.length} ticket(s)</button>}</td>
         </tr>;

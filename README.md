@@ -257,3 +257,10 @@ La caja suma los pagos antiguos y los eventos de Reparto y Entregas, resta anula
 El CSV de caja exporta eventos monetarios con importes firmados, usuario, origen y fecha de Lima, junto con el resumen acumulado. El historial de entregas muestra solo el importe cobrado en cada entrega, sin sumar pagos previos otra vez.
 
 Las cuentas nuevas de Entregas se provisionan con node scripts/create-delivery-users.mjs, a partir del plan privado artifacts/delivery-accounts/cuentas.json. Credenciales y estado permanecen en ese directorio ignorado; repetir el comando no rota claves ni reemplaza cuentas existentes.
+
+
+## Prepagado sin nuevo cobro en Entregas
+
+La confirmacion de entrega ofrece botones Efectivo, Yape y Prepagado. Prepagado sirve para confirmar que los tickets ya fueron pagados anteriormente: el cobro mostrado y registrado es cero y no aumenta caja, efectivo ni Yape. No cambia ningun pago que ya estaba registrado. Guarda el usuario, fecha, tickets e importe cero en el registro y en el historial; no inventa un ingreso anterior ni su medio o fecha. Anular una entrega conserva esa confirmacion y volver a entregar no cobra. Una anulacion explicita del estado Prepagado registra un reverso de cero, sin restar dinero a la caja.
+
+Ejecutar completo supabase/migrations/20261110_prepaid_delivery.sql (copia identica artifacts/faculty-roster/activar_prepagado_entregas.sql) despues de habilitar Entregas. La instalacion solo ajusta dos reglas de validacion y las funciones; verifica todas las filas de estudiantes, tickets, asignaciones, movimientos, auditoria, pagos y saldo inicial antes de confirmar. No instala pagos ni entregas reales. La advertencia del editor puede aparecer por reemplazar restricciones, sin borrar filas. Solo Prepagado permite importe cero; los cobros efectivos siguen exigiendo importe positivo.
