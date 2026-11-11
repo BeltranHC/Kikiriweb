@@ -14,6 +14,7 @@ export default function StatsPanel({ stats }) {
     { label: 'Entregados', value: number.format(pickedUp), icon: CheckCircle, color: 'success' },
     { label: 'Pendientes', value: number.format(pending), icon: Clock, color: 'warning' },
     { label: 'Estudiantes', value: number.format(totalStudents), icon: GraduationCap, color: 'info' },
+    { label: 'Acumulado registrado', value: money(stats?.collectedTotal||0), icon: Banknote, color: 'cash' },
     { label: 'Cobrado hoy', value: money(collectedNow), icon: Banknote, color: 'cash' },
   ];
   return <section className={styles.panel} aria-label="Resumen de entregas">
@@ -25,12 +26,12 @@ export default function StatsPanel({ stats }) {
           <span className={styles.cashPill}>
             <Banknote size={13} />
             <span>Efectivo:</span>
-            <b>{money(collectedCash)}</b>
+            <b>{money(label === 'Acumulado registrado' ? stats?.collectedCashTotal || 0 : collectedCash)}</b>
           </span>
           <span className={styles.yapePill}>
             <Smartphone size={13} />
             <span>Yape:</span>
-            <b>{money(collectedYape)}</b>
+            <b>{money(label === 'Acumulado registrado' ? stats?.collectedYapeTotal || 0 : collectedYape)}</b>
           </span>
         </div>
       )}

@@ -1,7 +1,7 @@
 'use client';
 
 import ModuleUnavailable from '@/components/ModuleUnavailable';
-import { DISTRIBUTION_ONLY } from '@/lib/module-mode.mjs';
+import { LEGACY_ADMIN_ENABLED } from '@/lib/module-mode.mjs';
 
 import { useState } from 'react';
 import { useToast } from '@/components/Toast';
@@ -82,5 +82,5 @@ function LegacyStudentsPage() {
 }
 
 export default function StudentsPage() {
-  return DISTRIBUTION_ONLY ? <ModuleUnavailable name="Estudiantes" /> : <LegacyStudentsPage />;
+  return !LEGACY_ADMIN_ENABLED ? <ModuleUnavailable name="Estudiantes" /> : <LegacyStudentsPage />;
 }

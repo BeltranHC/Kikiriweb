@@ -79,7 +79,7 @@ export default function TicketGrid({
     <div className={styles.gridHeader}>
       <div className={styles.gridStats}>
         <span className="badge badge-success"><Check size={14} /> {tickets.length - pending.length} recogidos</span>
-        <span className="badge badge-warning"><Clock size={14} /> {pending.length} pendientes</span>
+        <span className="badge badge-warning"><Clock size={14} /> {pending.length} por entregar</span>
       </div>
       {pending.length > 0 && <button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={handleSelectAll}>
         {selected.length === pending.length ? 'Deseleccionar todo' : 'Seleccionar todo'}

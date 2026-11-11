@@ -202,7 +202,7 @@ test('Promotion has its own filter and editor option, distinct from students wit
 });
 
 
-for(const route of ['/dashboard','/students','/movements','/extras','/import']) test(`Legacy screen ${route} is temporarily unavailable and never loads its data`,async({page})=>{
+for(const route of ['/students','/extras','/import']) test(`Legacy screen ${route} is temporarily unavailable and never loads its data`,async({page})=>{
   const state=await fixture(page);await page.goto(route);
   await expect(page.getByRole('heading',{name:'Temporalmente inhabilitado'})).toBeVisible();
   expect(state.calls).toHaveLength(0);
@@ -210,7 +210,7 @@ for(const route of ['/dashboard','/students','/movements','/extras','/import']) 
   await expect(page.getByRole('link',{name:'Estudiantes',exact:true})).toHaveCount(0);
   await page.getByRole('link',{name:'Ir a Reparto',exact:true}).click();await expect(page).toHaveURL(/\/distribution$/);
 });
-test('Signing in opens Reparto instead of the locked delivery dashboard',async({page})=>{
+test('Signing in opens Reparto while delivery is also available',async({page})=>{
   await fixture(page);await page.goto('/');await page.getByRole('textbox',{name:'Correo electrónico',exact:true}).fill('reparto@example.test');
   await page.locator('#password').fill('fixture-password');await page.getByRole('button',{name:'Iniciar sesión',exact:true}).click();
   await expect(page).toHaveURL(/\/distribution$/);await expect(page.getByRole('heading',{name:'Reparto de tickets'})).toBeVisible();
@@ -243,7 +243,7 @@ test('Assignment history and the blocked screen fit a mobile viewport',async({pa
   const mobileNav=await page.getByRole('navigation',{name:'Navegación móvil'}).boundingBox();expect(mobileNav.y).toBeGreaterThan(700);
   await expect(page.getByRole('link',{name:'KikiriWeb, reparto de tickets'})).toBeVisible();
   await page.screenshot({path:'artifacts/ui-preview/assignment-history-mobile.png',fullPage:true,animations:'disabled'});
-  await page.goto('/dashboard');await expect(page.getByRole('heading',{name:'Temporalmente inhabilitado'})).toBeVisible();
+  await page.goto('/students');await expect(page.getByRole('heading',{name:'Temporalmente inhabilitado'})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'artifacts/ui-preview/delivery-disabled-mobile.png',fullPage:true,animations:'disabled'});
 });
 

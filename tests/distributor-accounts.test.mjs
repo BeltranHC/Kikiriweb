@@ -53,3 +53,8 @@ test('Validates the shorter credentials and keeps older long records compatible'
   document.users[0].password='A'.repeat(36);assert.equal(validateDistributorCredentials(document)[0].password.length,36);
   document.users[0].password='A'.repeat(15);assert.throws(()=>validateDistributorCredentials(document),/16 y 72/);
 });
+
+
+test('Delivery accounts use the confirmed role and resume without changing passwords or existing distributor metadata',async()=>{
+ const {client,calls}=clientFixture();const document=prepareDistributorCredentials([{name:'Luzmery',email:'luz@example.test'},{name:'Yesica',email:'yes@example.test'}]);await provisionDistributors(client,document,async()=>{},{role:'delivery'});assert(calls.every(call=>call.app_metadata.system_role==='delivery'));await provisionDistributors(client,document,async()=>{},{role:'delivery'});assert.equal(calls.length,2);
+});

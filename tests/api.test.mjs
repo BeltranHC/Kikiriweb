@@ -10,7 +10,8 @@ import * as faculty from '../lib/faculty.mjs';
 import * as batchPayments from '../lib/ticket-payments.mjs';
 import * as facultyExport from '../lib/faculty-export.mjs';
 import * as assignmentHistory from '../lib/assignment-history.mjs';
-import { requireDeliveryEnabled } from '../lib/module-mode.mjs';
+import * as delivery from '../lib/delivery.mjs';
+import { requireDeliveryEnabled, requireLegacyAdminEnabled } from '../lib/module-mode.mjs';
 
 const NextResponse = { json: (value, options) => Response.json(value, options) };
 async function compile(path, dependencies, exports) {
@@ -20,7 +21,7 @@ async function compile(path, dependencies, exports) {
 async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
   const methods = { students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
-  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...batchPayments, ...assignmentHistory, requireDeliveryEnabled: deliveryEnabled ? () => {} : requireDeliveryEnabled, fetchAll, cashReport }, methods);
+  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...batchPayments, ...assignmentHistory, ...delivery, requireDeliveryEnabled: deliveryEnabled ? requireDeliveryEnabled : () => { throw new api.HttpError('Temporalmente inhabilitado',423); }, requireLegacyAdminEnabled, fetchAll, cashReport }, methods);
 }
 for (const [route, methods] of Object.entries({ students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
@@ -35,85 +36,32 @@ test('Anonymous Supabase accounts are not accepted as operators', async () => {
   const client = { auth: { getUser: async () => ({ data: { user: { ...user, is_anonymous: true } }, error: null }) } };
   assert.equal((await (await handlers('stats', client)).GET()).status, 403);
 });
-test('Student creation propagates transactional ticket conflicts', async () => {
+test('Obsolete student creation stays locked after delivery reactivation', async () => {
   const client = authenticated(async () => ({ data: null, error: { code: '23505', message: 'duplicate ticket' } }));
   const response = await (await handlers('students', client)).POST({ json: async () => ({ name: 'Demo', ticketStart: 1, ticketEnd: 2 }) });
-  assert.equal(response.status, 409);
+  assert.equal(response.status, 423);
 });
-test('Import validates the entire file before issuing a single transaction', async () => {
-  const calls = [];
-  const client = authenticated(async (name, args) => { calls.push({ name, args }); return { data: { studentsCreated: 1, ticketsCreated: 2 }, error: null }; });
-  const request = text => ({ headers: new Headers(), formData: async () => new Map([['file', { name: 'TEST.CSV', size: text.length, text: async () => text }]]) });
-  const route = await handlers('import', client);
-  assert.equal((await route.POST(request('nombre,tickets\nDemo,"1;1"'))).status, 400);
-  assert.equal(calls.length, 0);
-  assert.equal((await route.POST(request('nombre,tickets\nDemo,"1;2"'))).status, 200);
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].name, 'import_students');
+test('Obsolete import stays locked without reading a file or issuing writes',async()=>{
+ const route=await handlers('import',authenticated(()=>assert.fail('No legacy writes')));assert.equal((await route.POST({formData:()=>assert.fail('No file reads')})).status,423);
 });
+
 test('Undo forwards the expected movement to prevent stale cancellations', async () => {
   let params;
   const client = authenticated(async (name, args) => { params = args; return { data: [], error: null }; });
   const response = await (await handlers('tickets', client)).PATCH({ json: async () => ({ ticketIds: [user.id], isPickedUp: false, expectedMovementId: user.id }) });
   assert.equal(response.status, 200);
-  assert.equal(params.p_expected_movement_id, user.id);
+  assert.equal(params.p_movement_id, user.id);
 });
 
 
-test('Ticket search pagination pins its owner once and keeps counts and subsequent pages correct', async () => {
-  const owner = { id: user.id, name: 'Pinned owner' };
-  const matches = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
-  const client = { ...authenticated(), from(table) {
-    const query = { select(fields, options) { this.head = options?.head; return this; }, order() { return this; },
-      eq(field) { if (field === 'id') this.owner = true; return this; }, or() { return this; }, neq() { return this; },
-      maybeSingle() { this.single = true; return this; }, range(start, end) { this.start = start; this.end = end; return this; },
-      then(resolve, reject) {
-        const result = table === 'tickets' ? { data: { student_id: owner.id } } : this.owner ? { data: owner } :
-          { data: this.head ? null : matches.slice(this.start, this.end + 1), count: matches.length };
-        return Promise.resolve({ ...result, error: null }).then(resolve, reject);
-      },
-    };
-    return query;
-  } };
-  const route = await handlers('students', client);
-  const first = await (await route.GET({ url: 'http://localhost/api/students?q=1&pageSize=2&page=1' })).json();
-  const second = await (await route.GET({ url: 'http://localhost/api/students?q=1&pageSize=2&page=2' })).json();
-  const single = await (await route.GET({ url: 'http://localhost/api/students?q=1&pageSize=1&page=1' })).json();
-  assert.deepEqual(first.students.map(student => student.id), [owner.id, 'a']);
-  assert.deepEqual(second.students.map(student => student.id), ['b', 'c']);
-  assert.equal(first.total, 4); assert.equal(first.hasMore, true); assert.equal(second.hasMore, false);
-  assert.deepEqual(single.students.map(student => student.id), [owner.id]);
-});
-
-test('GET /api/students?status=pending queries pending tickets and filters by student IDs', async () => {
-  const pendingId = '33333333-3333-4333-8333-333333333333';
-  const pendingStudent = { id: pendingId, name: 'Estudiante Pendiente' };
-  const client = { ...authenticated(), from(table) {
-    const query = {
-      select() { return this; },
-      order() { return this; },
-      eq(field, val) { this[field] = val; return this; },
-      not() { return this; },
-      in(field, values) { this.inField = field; this.inValues = values; return this; },
-      range() { return this; },
-      neq() { return this; },
-      maybeSingle() { return this; },
-      then(resolve, reject) {
-        if (table === 'tickets') return Promise.resolve({ data: [{ student_id: pendingId }], error: null }).then(resolve, reject);
-        return Promise.resolve({ data: [pendingStudent], count: 1, error: null }).then(resolve, reject);
-      },
-    };
-    return query;
-  } };
-  const route = await handlers('students', client);
-  const response = await (await route.GET({ url: 'http://localhost/api/students?status=pending' })).json();
-  assert.equal(response.total, 1);
-  assert.deepEqual(response.students, [pendingStudent]);
+test('Delivery directory combines exact ticket or code search, status and pagination in one read-only RPC',async()=>{
+ const calls=[];const route=await handlers('students',authenticated(async(name,args)=>{calls.push({name,args});return{data:{students:[],total:0},error:null};}));
+ const response=await route.GET({url:'http://localhost/api/students?q=1000&status=pending&page=2&pageSize=30'});assert.equal(response.status,200);assert.equal(calls.length,1);assert.equal(calls[0].name,'delivery_directory');assert.equal(calls[0].args.p_query,'1000');assert.equal(calls[0].args.p_status,'pending');assert.equal(calls[0].args.p_page,2);
 });
 
 test('Ticket creation rejects JSON null with a validation response', async () => {
   const route = await handlers('tickets', authenticated(() => assert.fail('No writes expected')));
-  assert.equal((await route.POST({ json: async () => null })).status, 400);
+  assert.equal((await route.POST({ json: async () => null })).status, 423);
 });
 
 test('GET /api/tickets?number= looks up a single ticket and its student', async () => {
@@ -124,6 +72,7 @@ test('GET /api/tickets?number= looks up a single ticket and its student', async 
     from(table) {
       return {
         select() { return this; },
+        is() { return this; },
         eq(field, val) {
           this.field = field;
           this.val = val;
@@ -314,4 +263,11 @@ test('Batch payments validate all identities, versions and amounts before one tr
  const payload={studentId:user.id,tickets:[{id:user.id,updated_at:'2026-11-06T10:00:00Z'}],condition:'cash',expectedTotal:15,actorId:'forged'};
  for(const value of [null,'invalid',{...payload,tickets:[]},{...payload,tickets:[...payload.tickets,...payload.tickets]},{...payload,condition:'card'},{...payload,expectedTotal:-1},{...payload,expectedTotal:15.001}])assert.equal((await route.PATCH({json:async()=>value})).status,400);
  assert.equal(calls.length,0);assert.equal((await route.PATCH({json:async()=>payload})).status,200);assert.equal(calls.length,1);assert.equal(calls[0].name,'set_faculty_ticket_payments');assert.equal(calls[0].args.p_expected_total,15);assert.equal('actorId' in calls[0].args,false);
+});
+
+
+test('Delivery submits every expected ticket version and rejects fabricated prepaid methods before any RPC',async()=>{
+ const calls=[];const route=await handlers('tickets',authenticated(async(name,args)=>{calls.push({name,args});return{data:[],error:null};}));
+ const body={ticketIds:[user.id],isPickedUp:true,paymentMethod:'cash',expectedTickets:[{id:user.id,updated_at:'2026-11-10T10:00:00Z'}]};
+ assert.equal((await route.PATCH({json:async()=>({...body,paymentMethod:'previo'})})).status,400);assert.equal(calls.length,0);assert.equal((await route.PATCH({json:async()=>body})).status,200);assert.equal(calls[0].name,'deliver_tickets');assert.deepEqual(calls[0].args.p_expected_tickets,body.expectedTickets);
 });

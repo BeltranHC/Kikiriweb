@@ -1,0 +1,29 @@
+.page { display: grid; gap: 20px; padding-bottom: 135px; }
+.header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.header h1 { font-size: clamp(1.5rem,3vw,2rem); }
+.header p, .help { font-size: .8rem; color: var(--text-secondary); }
+.actions, .filters, .filters > div { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.actions .btn, .filters button { min-height: 44px; }
+.cash { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cash article { border: 1px solid var(--border-color); border-radius: 14px; background: var(--bg-secondary); padding: 16px; display: grid; gap: 6px; }
+.cash span { color: var(--text-secondary); font-size: .8rem; }
+.cash strong { font-size: 1.6rem; }
+.cash small { color: var(--text-tertiary); font-size: .73rem; }
+.filters { margin-top: 12px; justify-content: space-between; }
+.people { display: grid; gap: 14px; }
+.people > article > p { padding: 6px 12px; }
+.dock { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); width: min(900px,calc(100vw - 24px)); padding: 14px; border: 1px solid var(--border-color); border-radius: 14px; background: var(--bg-secondary); box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 10px; z-index: 900; }
+.dock > span { flex: 1; display: grid; gap: 5px; font-size: .85rem; }
+.dock small { color: var(--text-secondary); }
+.dialog { max-width: 620px; max-height: 90dvh; }
+.dialog form { display: grid; gap: 14px; margin-top: 16px; }
+.dialog form p { margin-bottom: 0; }
+.total { display: block; padding: 14px; background: var(--primary-glow); border-radius: 9px; }
+@media(max-width:1024px) { .dock { bottom: calc(82px + env(safe-area-inset-bottom)); flex-wrap: wrap; } .dock > span { flex-basis: 100%; } .dock button:last-child { flex: 1; } }
+@media(max-width:450px) { .cash { grid-template-columns: repeat(2,minmax(0,1fr)); } .cash article { padding: 12px; } .cash strong { font-size: 1.25rem; } }
+
+.selectedList { max-height: 200px; overflow: auto; padding-left: 20px; font-size: .85rem; display: grid; gap: 7px; }
+
+.filters > div { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.filters select { width: 100%; min-width: 0; }
+.filters > button { flex-shrink: 0; align-self: flex-end; }

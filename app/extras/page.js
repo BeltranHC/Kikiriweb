@@ -1,7 +1,7 @@
 'use client';
 
 import ModuleUnavailable from '@/components/ModuleUnavailable';
-import { DISTRIBUTION_ONLY } from '@/lib/module-mode.mjs';
+import { LEGACY_ADMIN_ENABLED } from '@/lib/module-mode.mjs';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/Toast';
@@ -61,5 +61,5 @@ function LegacyExtrasPage() {
 }
 
 export default function ExtrasPage() {
-  return DISTRIBUTION_ONLY ? <ModuleUnavailable name="Extras" /> : <LegacyExtrasPage />;
+  return !LEGACY_ADMIN_ENABLED ? <ModuleUnavailable name="Extras" /> : <LegacyExtrasPage />;
 }

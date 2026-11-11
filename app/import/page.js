@@ -1,7 +1,7 @@
 'use client';
 
 import ModuleUnavailable from '@/components/ModuleUnavailable';
-import { DISTRIBUTION_ONLY } from '@/lib/module-mode.mjs';
+import { LEGACY_ADMIN_ENABLED } from '@/lib/module-mode.mjs';
 
 import { useState, useRef } from 'react';
 import { useToast } from '@/components/Toast';
@@ -74,5 +74,5 @@ function LegacyImportPage() {
 }
 
 export default function ImportPage() {
-  return DISTRIBUTION_ONLY ? <ModuleUnavailable name="Importación anterior" /> : <LegacyImportPage />;
+  return !LEGACY_ADMIN_ENABLED ? <ModuleUnavailable name="Importación anterior" /> : <LegacyImportPage />;
 }

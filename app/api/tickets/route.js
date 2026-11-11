@@ -1,8 +1,9 @@
-import { requireDeliveryEnabled } from '@/lib/module-mode.mjs';
+import { requireDeliveryEnabled, requireLegacyAdminEnabled } from '@/lib/module-mode.mjs';
 import { NextResponse } from 'next/server';
 import { requireSession, apiError } from '@/lib/api';
 import { fetchAll } from '@/lib/pagination.mjs';
-import { pickupInput, ticketNumber, validateUuid, ValidationError } from '@/lib/validation.mjs';
+import { deliveryInput } from '@/lib/delivery.mjs';
+import { ticketNumber, validateUuid, ValidationError } from '@/lib/validation.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,21 +19,23 @@ export async function GET(request) {
       const num = ticketNumber(numberParam);
       const { data: ticket, error } = await supabase
         .from('tickets')
-        .select('id, ticket_number, student_id, is_picked_up, picked_up_at, picked_up_by, is_extra, is_paid, unit_price, movement_id, payment_method')
+        .select('*').is('deleted_at',null).eq('is_available',false)
         .eq('ticket_number', num)
         .maybeSingle();
 
       if (error) throw error;
-      if (!ticket) return NextResponse.json({ error: `Ticket #${num} no encontrado` }, { status: 404 });
+      if (!ticket || (!ticket.student_id && !ticket.is_extra)) return NextResponse.json({ error: `Ticket #${num} no encontrado` }, { status: 404 });
 
       let student = null;
       if (ticket.student_id) {
-        const studentFields = 'id,name,code,dni,created_at,tickets(id,ticket_number,is_picked_up,picked_up_at,picked_up_by,movement_id,is_extra,is_paid,payment_method,unit_price)';
-        const { data: s } = await supabase
+        const studentFields = 'id,name,code,deleted_at,tickets(*)';
+        const { data: s, error: studentError } = await supabase
           .from('students')
           .select(studentFields)
-          .eq('id', ticket.student_id)
+          .eq('id', ticket.student_id).is('deleted_at',null).is('tickets.deleted_at',null).eq('tickets.is_available',false)
           .maybeSingle();
+        if(studentError)throw studentError;
+        if(!s) return NextResponse.json({error:'Participante no disponible'},{status:404});
         student = s;
       }
 
@@ -40,7 +43,7 @@ export async function GET(request) {
     }
 
     const tickets = await fetchAll(() => {
-      const query = supabase.from('tickets').select('*').order('ticket_number').order('id');
+      const query = supabase.from('tickets').select('*').is('deleted_at',null).eq('is_available',false).order('ticket_number').order('id');
       return extra ? query.eq('is_extra', true) : query;
     });
     return NextResponse.json(tickets);
@@ -50,7 +53,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const { supabase } = await requireSession();
-    requireDeliveryEnabled();
+    requireLegacyAdminEnabled();
     const body = await request.json();
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ValidationError('Datos de ticket inválidos');
     const number = ticketNumber(body.ticketNumber);
@@ -68,11 +71,10 @@ export async function PATCH(request) {
   try {
     const { supabase } = await requireSession();
     requireDeliveryEnabled();
-    const input = pickupInput(await request.json());
-    const { data, error } = await supabase.rpc('update_ticket_pickup', {
-      p_ticket_ids: input.ticketIds, p_is_picked_up: input.isPickedUp,
-      p_payment_method: input.paymentMethod, p_expected_movement_id: input.expectedMovementId,
-    });
+    const input=deliveryInput(await request.json());
+    const {data,error}=input.isPickedUp
+      ? await supabase.rpc('deliver_tickets',{p_ticket_ids:input.ticketIds,p_payment_method:input.paymentMethod,p_expected_tickets:input.expectedTickets})
+      : await supabase.rpc('undo_delivery',{p_ticket_ids:input.ticketIds,p_movement_id:input.expectedMovementId});
     if (error) throw error;
     return NextResponse.json(data);
   } catch (error) { return apiError(error); }

@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase-browser';
 import { clearSearchStates } from '@/lib/view-state.mjs';
 import { DISTRIBUTION_ONLY, APP_HOME_ROUTE } from '@/lib/module-mode.mjs';
 import { useToast } from './Toast';
-import { LayoutDashboard, GraduationCap, Ticket, Upload, LogOut, Bird, History, Sun, Moon, LockKeyhole } from 'lucide-react';
+import { LayoutDashboard, Ticket, LogOut, Bird, History, Sun, Moon } from 'lucide-react';
 import styles from './Navbar.module.css';
 
 export default function Navbar() {
@@ -45,17 +45,11 @@ export default function Navbar() {
     } catch {}
   };
 
-  const navItems = DISTRIBUTION_ONLY ? [
-    { href: '/distribution', label: 'Reparto', icon: Ticket },
-    { href: '/distribution/history', label: 'Historial', icon: History },
-    { href: '/dashboard', label: 'Entregas', icon: LockKeyhole, locked: true },
-  ] : [
-    { href: '/dashboard', label: 'Panel', icon: LayoutDashboard },
-    { href: '/distribution', label: 'Reparto', icon: Ticket },
-    { href: '/students', label: 'Estudiantes', icon: GraduationCap },
-    { href: '/movements', label: 'Movimientos', icon: History },
-    { href: '/extras', label: 'Extras', icon: Ticket },
-    { href: '/import', label: 'Importar', icon: Upload },
+  const navItems = [
+    { href:'/distribution',label:'Reparto',icon:Ticket },
+    { href:'/distribution/history',label:'Historial',icon:History },
+    { href:'/dashboard',label:'Entregas',icon:LayoutDashboard },
+    { href:'/movements',label:'Movimientos',icon:History },
   ];
 
   const logout = async () => {
@@ -72,7 +66,7 @@ export default function Navbar() {
     <div className={styles.navContent}>
       <Link href={APP_HOME_ROUTE} className={styles.brand} aria-label="KikiriWeb, reparto de tickets">
         <span className={styles.brandIcon}><Bird size={23} /></span>
-        <span className={styles.brandText}>KikiriWeb<span className={styles.brandSubtitle}>{DISTRIBUTION_ONLY ? 'Reparto de tickets' : 'Control de entregas'}</span></span>
+        <span className={styles.brandText}>KikiriWeb<span className={styles.brandSubtitle}>{DISTRIBUTION_ONLY ? 'Reparto de tickets' : 'Reparto y entregas'}</span></span>
       </Link>
       <div className={styles.navLinks}>{navItems.map(({ href, label, icon: Icon, locked }) => <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}
         title={locked ? 'Temporalmente inhabilitado' : undefined} className={`${styles.navLink} ${locked ? styles.locked : ''} ${isActive(href) ? styles.navLinkActive : ''}`}><Icon size={17} /><span>{label}{locked && <small className={styles.lockedLabel}>Temporalmente inhabilitado</small>}</span></Link>)}</div>

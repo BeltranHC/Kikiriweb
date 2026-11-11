@@ -146,9 +146,9 @@ Antes de cada eliminación, guarda la ficha de ambos perfiles y las relaciones o
 Los scripts solo generan archivos; no conectan ni aplican cambios en Supabase. El reporte local no garantiza que la base remota siga teniendo los mismos nombres: las consultas generadas validan el estado vigente al ejecutarse.
 
 
-## Fase temporal: solo Reparto
+## Modulos activos
 
-`lib/module-mode.mjs` mantiene activo `DISTRIBUTION_ONLY`. El acceso lleva a Reparto; el menú muestra Reparto, Historial y Entregas con el aviso de bloqueo. Panel, Estudiantes, Movimientos, Extras e Importación anterior muestran **Temporalmente inhabilitado** y no cargan sus componentes operativos. El alta, edición e importación del padrón siguen disponibles dentro de Reparto.
+`lib/module-mode.mjs` mantiene activos Reparto, Entregas y Movimientos. El acceso inicial lleva a Reparto; el menu permite abrir Entregas y ambos historiales. Estudiantes, Extras e Importacion anteriores permanecen bloqueados. El alta, edicion e importacion del padron se realizan dentro de Reparto.
 
 Las API anteriores responden 423 para sesiones autorizadas, antes de consultar o modificar datos. Las sesiones sin autenticar siguen recibiendo 401. Para completar el bloqueo directo de RPC y habilitar la consulta del historial, ejecuta `supabase/migrations/20261031_distribution_only_history.sql` en Supabase. Se prepara una copia en `artifacts/faculty-roster/activar_solo_reparto.sql`; no vuelve a importar estudiantes ni modifica datos anteriores. La migración revoca todos los overloads de las funciones anteriores para PUBLIC, anon y authenticated, manteniendo las funciones del reparto. Debe aplicarse después de las migraciones iniciales.
 
@@ -180,7 +180,7 @@ En **Tickets asignados / Ver y editar**, cada ticket permite corregir su numero,
 
 Los triggers de `students` y `tickets` guardan cada alta, modificacion o eliminacion en `faculty_changes`, incluidos los cambios de una importacion. Registran usuario y correo de la sesion, fecha, valores anteriores y posteriores. No aceptan un actor enviado por el navegador. Datos y auditoria se confirman en la misma transaccion: si falla el registro del cambio, se cancela la escritura. Los operadores solo pueden leer esta tabla. Las acciones administrativas sin una sesion de usuario se muestran como Sistema / SQL. No se inventan autores para los cambios anteriores a esta activacion.
 
-**Historial / Cambios de fichas y tickets** permite consultar estos registros por persona, numero anterior o nuevo y usuario, con fechas de Lima y paginacion. Antes de reactivar el modulo de entregas, sus consultas deberan excluir los tickets disponibles sin asignacion.
+**Historial / Cambios de fichas y tickets** permite consultar estos registros por persona, numero anterior o nuevo y usuario, con fechas de Lima y paginacion. Entregas excluye tickets disponibles sin asignacion y participantes o tickets eliminados.
 
 
 ### Exportar participantes y tickets
@@ -232,11 +232,11 @@ La instalacion conserva una copia temporal privada de cada fila existente y comp
 
 El historial identifica el numero del ticket, pagos, anulaciones y eliminaciones con sus valores anteriores y posteriores y el usuario. El CSV incluye solo participantes y tickets activos, y agrega pagados, pendientes, numeros por medio e importe pagado. Los totales y porcentajes del padron excluyen los eliminados y siguen basados en la asignacion actual. El historial de lotes conserva las asignaciones historicas completas.
 
-Antes de reactivar Entregas hay que adaptar sus consultas para excluir los eliminados y respetar los pagos previos de Reparto y sus reversos; no se debe volver a cobrar un ticket pagado ni tratar una anulacion de recojo como anulacion del pago.
+Entregas excluye los eliminados y respeta los pagos previos de Reparto y sus reversos. No vuelve a cobrar un ticket pagado ni trata una anulacion de recojo como anulacion del pago.
 
 Desde el historial de asignaciones, Editar / pagos abre los tickets que siguen activos en el lote y usa los mismos pagos, anulaciones y correcciones auditados de Reparto. Consulta por ID de lote y ticket actual, sin modificar las instantaneas originales ni operar sobre numeros historicos que pudieron reutilizarse. No requiere otra migracion.
 
-Los cobros de Reparto se conservan en faculty_payments y en el estado del ticket. Antes de reactivar Entregas, adaptar la caja para mostrar saldo acumulado y cobros del dia por separado, restar anulaciones y evitar contar nuevamente un pago al entregar. El calculo antiguo ticket_stats solo cuenta entregas del dia; no representa el dinero acumulado de Reparto. Entregas permanece inhabilitado.
+Los cobros de Reparto se conservan en faculty_payments y en el estado del ticket. La caja activa usa delivery_stats y separa saldo acumulado y neto diario, resta anulaciones y evita contar otra vez un pago al entregar. ticket_stats es una funcion antigua revocada y no se usa para la caja actual.
 
 ## Asignacion en modal y pagos conjuntos
 
@@ -244,4 +244,16 @@ La accion Asignar tickets abre un dialogo en escritorio y movil. Cerrar o pulsar
 
 En los tickets existentes de Reparto y en el historial, Pagar varios tickets permite seleccionar parte o todos los tickets pendientes, ver la suma y confirmar un pago conjunto en efectivo o Yape. La condicion Pendiente de pago anula los pagos seleccionados con confirmacion; no elimina asignaciones ni eventos anteriores. Los tickets ya pagados no se cobran otra vez y los ya pendientes no generan movimientos vacios.
 
-Requiere ejecutar completo supabase/migrations/20261106_batch_ticket_payments.sql (copia privada: artifacts/faculty-roster/activar_pagos_en_grupo.sql). Instalar la funcion no ejecuta pagos y compara las filas existentes antes de confirmar la migracion. La operacion conjunta bloquea y verifica todos los tickets y sus versiones antes de mutar, comprueba el total contra los precios guardados y conserva importes originales al anular. Cualquier error revierte pagos, auditoria y estado del grupo completo. Entregas sigue bloqueado.
+Requiere ejecutar completo supabase/migrations/20261106_batch_ticket_payments.sql (copia privada: artifacts/faculty-roster/activar_pagos_en_grupo.sql). Instalar la funcion no ejecuta pagos y compara las filas existentes antes de confirmar la migracion. La operacion conjunta bloquea y verifica todos los tickets y sus versiones antes de mutar, comprueba el total contra los precios guardados y conserva importes originales al anular. Cualquier error revierte pagos, auditoria y estado del grupo completo. Entregas utiliza el mismo registro de pagos.
+
+## Entregas habilitadas y caja preservada
+
+Entregas y Movimientos funcionan junto a Reparto; el inicio de sesion mantiene Reparto como pagina inicial. La administracion antigua (Estudiantes, Extras e Importar anteriores) permanece bloqueada y sus RPC de escritura siguen revocados. Los participantes y tickets se administran desde Reparto.
+
+Ejecutar completo supabase/migrations/20261110_enable_deliveries.sql (copia privada artifacts/faculty-roster/habilitar_entregas_y_caja.sql). La instalacion verifica que estudiantes, tickets, asignaciones, movimientos y pagos existentes conserven todas sus filas y campos. Agrega una base inmutable de pagos anteriores sin ledger, incluyendo sus anulaciones existentes. Los pagos de medio o fecha desconocidos se muestran separados y nunca se inventa un cobro de hoy.
+
+La caja suma los pagos antiguos y los eventos de Reparto y Entregas, resta anulaciones de pago y separa acumulado de neto diario. Entregar un ticket ya pagado conserva metodo, fecha, autor e importe. En lotes mixtos solo se cobran los pendientes. Anular una entrega no anula su pago; una nueva entrega del mismo ticket no cobra otra vez. Versiones de tickets, propietarios activos y estados se verifican con bloqueos ordenados antes de cobrar o entregar. Cualquier error revierte el lote completo.
+
+El CSV de caja exporta eventos monetarios con importes firmados, usuario, origen y fecha de Lima, junto con el resumen acumulado. El historial de entregas muestra solo el importe cobrado en cada entrega, sin sumar pagos previos otra vez.
+
+Las cuentas nuevas de Entregas se provisionan con node scripts/create-delivery-users.mjs, a partir del plan privado artifacts/delivery-accounts/cuentas.json. Credenciales y estado permanecen en ese directorio ignorado; repetir el comando no rota claves ni reemplaza cuentas existentes.

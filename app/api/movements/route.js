@@ -10,7 +10,7 @@ export async function GET() {
     requireDeliveryEnabled();
     const [events, current] = await Promise.all([
       fetchAll(() => supabase.from('ticket_movements').select('*').order('created_at', { ascending: false }).order('id')),
-      fetchAll(() => supabase.from('tickets').select('id,movement_id').eq('is_picked_up', true).order('id')),
+      fetchAll(() => supabase.from('tickets').select('id,movement_id').eq('is_picked_up', true).is('deleted_at',null).order('id')),
     ]);
     const active = new Map(current.map(ticket => [ticket.id, ticket.movement_id]));
     return NextResponse.json(events.map(event => ({ ...event,

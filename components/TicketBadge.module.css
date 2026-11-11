@@ -6,3 +6,6 @@
 .selected { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; box-shadow: 0 0 12px var(--primary-glow); transform: translateY(-2px); }
 .selected:hover:not(:disabled) { background: var(--primary-dark) !important; border-color: var(--primary-dark) !important; }
 .number { font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.015em; }
+
+.badge { min-height: 48px; height: auto; flex-direction: column; gap: 2px; }
+.badge small { font-size: .59rem; line-height: 1; }

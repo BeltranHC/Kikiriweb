@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { assignmentHistoryFilters } from '../lib/assignment-history.mjs';
-import { DISTRIBUTION_ONLY,APP_HOME_ROUTE,requireDeliveryEnabled } from '../lib/module-mode.mjs';
+import { DISTRIBUTION_ONLY,APP_HOME_ROUTE,requireDeliveryEnabled,requireLegacyAdminEnabled } from '../lib/module-mode.mjs';
 
 const base=await readFile(new URL('../database.sql',import.meta.url),'utf8');
 const faculty=await readFile(new URL('../supabase/migrations/20261031_faculty_distribution.sql',import.meta.url),'utf8');
@@ -16,7 +16,7 @@ CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$SELECT coalesc
 GRANT USAGE ON SCHEMA auth TO anon,authenticated;GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO anon,authenticated;`;
 
 test('Distribution phase sets the home route and exposes a consistent locked-module response',()=>{
-  assert.equal(DISTRIBUTION_ONLY,true);assert.equal(APP_HOME_ROUTE,'/distribution');assert.throws(requireDeliveryEnabled,error=>error.status===423&&error.message==='Temporalmente inhabilitado');
+  assert.equal(DISTRIBUTION_ONLY,false);assert.equal(APP_HOME_ROUTE,'/distribution');assert.doesNotThrow(requireDeliveryEnabled);assert.throws(requireLegacyAdminEnabled,error=>error.status===423&&error.message==='Temporalmente inhabilitado');
 });
 test('Assignment history validates dates, pagination and academic groups',()=>{
   const filters=assignmentHistoryFilters(new URLSearchParams('from=2026-10-31&to=2026-10-31&semester=11'));

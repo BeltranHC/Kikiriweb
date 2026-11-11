@@ -10,7 +10,8 @@ import ConfirmModal from '@/components/ConfirmModal';
 import { requestJson, jsonBody } from '@/lib/client';
 import { useSearchState } from '@/hooks/useSearchState';
 import { SESSION_RESTORED_EVENT } from '@/lib/session-events.mjs';
-import { parsePayment, summarizePayments, APP_TIME_ZONE } from '@/lib/domain.mjs';
+import { APP_TIME_ZONE } from '@/lib/domain.mjs';
+import { deliveryMovementTotal } from '@/lib/delivery.mjs';
 import { formatTicketNumber } from '@/lib/utils';
 import styles from './page.module.css';
 
@@ -48,7 +49,7 @@ function LegacyMovementsPage() {
       <thead><tr><th>Movimiento</th><th>Detalle de entrega (Tickets y Alumnos)</th><th>Fecha y hora</th><th>Pago</th><th>Cajero responsable</th><th>Estado</th><th>Acción</th></tr></thead>
       <tbody>{filtered.map(event => {
         const isUndo = event.kind === 'undo';
-        const totals = summarizePayments(event.ticket_snapshots.map(ticket => ({ ...ticket, payment_method: isUndo ? ticket.payment_method : event.payment_method })));
+        const total = deliveryMovementTotal(event);
         const groups = event.ticket_snapshots.reduce((acc, ticket) => {
           const student = ticket.student_name || (ticket.is_extra ? 'Ticket Extra' : 'Sin asignar');
           if (!acc[student]) acc[student] = [];
@@ -79,13 +80,13 @@ function LegacyMovementsPage() {
             </div>
           </td>
           <td>{new Date(event.created_at).toLocaleString('es-PE', { timeZone: APP_TIME_ZONE })}</td>
-          <td>{isUndo ? 'Entrega anulada' : `${parsePayment(event.payment_method).label}${totals.total ? ` (S/ ${totals.total})` : ''}`}</td>
+          <td>{isUndo ? 'Entrega anulada' : total ? `Cobrado en esta entrega: S/ ${total}` : 'Pagado previamente; sin cobro nuevo'}</td>
           <td>{event.actor_email || 'Desconocido'}</td><td><span className={`badge ${isUndo || !event.activeTicketIds.length ? 'badge-warning' : 'badge-success'}`}>{status}</span></td>
           <td>{!isUndo && event.activeTicketIds.length > 0 && <button className="btn btn-danger btn-sm" onClick={() => setUndo(event)}><Undo2 size={14} /> Anular {event.activeTicketIds.length} ticket(s)</button>}</td>
         </tr>;
       })}</tbody>
     </table></div> : <div className="empty-state"><History size={48} /><h3>No hay movimientos</h3></div>}
-    <ConfirmModal isOpen={!!undo} title="Anular entrega" message={`Se anularán ${undo?.activeTicketIds.length || 0} ticket(s). El movimiento original y la anulación quedarán registrados.`}
+    <ConfirmModal isOpen={!!undo} title="Anular entrega" message={`Se anularán ${undo?.activeTicketIds.length || 0} ticket(s). Los pagos se conservan. El movimiento original y la anulación quedarán registrados.`}
       confirmText="Sí, anular" onConfirm={cancelPickup} onCancel={() => setUndo(null)} />
   </div>;
 }
