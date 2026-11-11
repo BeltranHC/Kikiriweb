@@ -7,6 +7,7 @@ import StudentCard from '@/components/StudentCard';
 import StatsPanel from '@/components/StatsPanel';
 import Pagination from '@/components/Pagination';
 import ConfirmModal from '@/components/ConfirmModal';
+import PaymentOptions from '@/components/PaymentOptions';
 import { useStudents } from '@/hooks/useStudents';
 import { useSearchState } from '@/hooks/useSearchState';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
@@ -58,7 +59,7 @@ export default function DashboardPage(){
   <dialog ref={dialog} className={`modal-content confirm-dialog ${styles.dialog}`} aria-labelledby="delivery-confirm-title" onCancel={event=>{event.preventDefault();if(!busy)setConfirming(false);}}>
    <header className={styles.header}><h2 id="delivery-confirm-title">Confirmar entrega</h2><button className="btn btn-secondary btn-sm" aria-label="Cerrar confirmacion de entrega" disabled={busy} onClick={()=>setConfirming(false)}><X size={16}/>Cerrar</button></header>
    <form onSubmit={deliver}><ul className={styles.selectedList}>{selected.map(ticket=><li key={ticket.id}>#{ticket.ticket_number} - {ticket.student?.name||'Ticket extra'}: {ticket.is_paid?'pagado previamente':'pendiente de pago'}</li>)}</ul><p>{summary.prepaid} ya pagados. No se cobraran otra vez.</p><strong className={styles.total}>Total a cobrar ahora: {money(summary.total)}</strong>
-    {summary.unpaid>0?<div className="input-group"><label htmlFor="delivery-payment">Medio del nuevo cobro</label><select id="delivery-payment" className="input-field" value={method} onChange={event=>setMethod(event.target.value)} disabled={busy}><option value="cash">Efectivo</option><option value="yape">Yape</option></select></div>:<p>Todos los tickets ya estan pagados. Solo se registrara la entrega.</p>}
+    {summary.unpaid>0?<PaymentOptions label="Medio del nuevo cobro" value={method} onChange={setMethod} disabled={busy} />:<p>Todos los tickets ya estan pagados. Solo se registrara la entrega.</p>}
     {error&&<p role="alert" className="text-danger">{error}</p>}<div className="confirm-actions"><button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>setConfirming(false)}>Cancelar</button><button className="btn btn-primary" disabled={busy||!selected.length}><CheckCircle size={16}/>{busy?'Registrando...':'Confirmar y entregar'}</button></div>
    </form>
   </dialog>

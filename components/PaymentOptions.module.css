@@ -1,0 +1,11 @@
+.fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.fieldset legend { padding: 0; margin-bottom: 10px; color: var(--text-secondary); font-size: .85rem; font-weight: 600; }
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.option { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; min-width: 0; padding: 12px 10px; border: 2px solid var(--border-color); border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer; }
+.option svg { flex-shrink: 0; }
+.option span { overflow-wrap: anywhere; }
+.option:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.option:hover:not(:disabled) { border-color: var(--primary); }
+.option[aria-pressed='true'] { border-color: var(--primary); background: var(--primary-glow); color: var(--primary); }
+.option:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.option:disabled { opacity: .5; cursor: not-allowed; }

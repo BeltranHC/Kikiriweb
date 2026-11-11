@@ -4,6 +4,7 @@ import { X, Save } from 'lucide-react';
 import { requestJson, jsonBody } from '@/lib/client';
 import { batchPaymentInput, paymentSelection } from '@/lib/ticket-payments.mjs';
 import { parsePayment } from '@/lib/domain.mjs';
+import PaymentOptions from './PaymentOptions';
 import styles from './TicketPayments.module.css';
 
 export default function TicketPayments({ value, onClose, onSaved }) {
@@ -29,7 +30,7 @@ export default function TicketPayments({ value, onClose, onSaved }) {
     <form onSubmit={submit} className={styles.form}>
       <div className={styles.selection}><button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>{reset();setIds(tickets.filter(ticket=>!ticket.is_paid).map(ticket=>ticket.id));}}>Seleccionar pendientes</button><button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>{reset();setIds([]);}}>Limpiar selección</button></div>
       <fieldset className={styles.tickets} disabled={busy}><legend>Tickets de esta persona</legend>{tickets.map(ticket=><label key={ticket.id}><input type="checkbox" checked={ids.includes(ticket.id)} onChange={()=>toggle(ticket.id)} aria-label={`Seleccionar ticket ${ticket.ticket_number}`} /><span><strong>#{ticket.ticket_number}</strong><small>{ticket.is_paid ? `Pagado: ${parsePayment(ticket.payment_method).label}` : 'Pendiente de pago'}</small></span></label>)}</fieldset>
-      <div className="input-group"><label htmlFor={`${title}-condition`}>Estado de los tickets seleccionados</label><select id={`${title}-condition`} className="input-field" value={condition} disabled={busy} onChange={event=>{reset();setCondition(event.target.value);}}><option value="cash">Pagado en efectivo</option><option value="yape">Pagado con Yape</option><option value="pending">Pendiente de pago</option></select></div>
+      <PaymentOptions label="Estado de los tickets seleccionados" value={condition} onChange={method=>{reset();setCondition(method);}} disabled={busy} allowPending />
       <div role="status" className={styles.total}><strong>{summary.selected.length} tickets seleccionados</strong><span>{summary.changing.length} {condition==='pending'?'pagos por anular':'tickets por pagar'}</span><b>{condition==='pending'?'Total por anular':'Total a pagar'}: S/ {summary.total.toFixed(2)}</b>{summary.unchanged>0&&<small>{summary.unchanged} sin cambios: {condition==='pending'?'ya estaban pendientes':'ya estaban pagados y no se cobrarán otra vez'}.</small>}</div>
       {condition==='pending'&&<p>Al confirmar se anularán los pagos seleccionados. Se conservarán las asignaciones y el historial de cada pago.</p>}
       {condition!=='pending'&&<p>El medio elegido se aplicará a los tickets pendientes. Para cambiar el medio de un pago anterior, déjalo pendiente primero.</p>}
