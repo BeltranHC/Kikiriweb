@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase-browser';
 import { clearSearchStates } from '@/lib/view-state.mjs';
 import { DISTRIBUTION_ONLY, APP_HOME_ROUTE } from '@/lib/module-mode.mjs';
 import { useToast } from './Toast';
-import { LayoutDashboard, Ticket, LogOut, Bird, History, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Ticket, LogOut, Bird, History, Sun, Moon, BarChart3 } from 'lucide-react';
 import styles from './Navbar.module.css';
 
 export default function Navbar() {
@@ -50,6 +50,7 @@ export default function Navbar() {
     { href:'/distribution/history',label:'Historial',icon:History },
     { href:'/dashboard',label:'Entregas',icon:LayoutDashboard },
     { href:'/movements',label:'Movimientos',icon:History },
+    { href:'/statistics',label:'Estadísticas',icon:BarChart3 },
   ];
 
   const logout = async () => {

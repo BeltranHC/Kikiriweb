@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {buildAnalytics} from '../lib/analytics.mjs';
 import {PGlite} from '@electric-sql/pglite';
 const names=['database.sql','20261031_faculty_distribution.sql','20261031_promotion_category.sql','20261031_distribution_only_history.sql','20261103_recipient_ticket_changes.sql','20261104_directory_performance.sql','20261104_semester_progress.sql','20261105_distribution_payments_deletion.sql','20261106_batch_ticket_payments.sql','20261110_enable_deliveries.sql','20261110_prepaid_delivery.sql'];
 const files=await Promise.all(names.map(name=>readFile(new URL('../'+(name==='database.sql'?'':'supabase/migrations/')+name,import.meta.url),'utf8')));
+const analyticsMigration=await readFile(new URL('../supabase/migrations/20261112_statistics_dashboard.sql',import.meta.url),'utf8');
 const actor='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 test('Delivery reactivation preserves prepaid tickets and reconciles legacy, distribution and delivery cash without double charges',async t=>{
  const db=new PGlite();const q=async(sql,values=[])=>(await db.query(sql,values)).rows;
@@ -26,7 +28,13 @@ test('Delivery reactivation preserves prepaid tickets and reconciles legacy, dis
   const pre=await save('PREPAID');await assign(pre,[4],'cash');await save('WITHOUT');
   const tables=['students','tickets','ticket_assignments','ticket_movements','faculty_changes','faculty_payments'];const before=await Promise.all(tables.map(rows));await db.exec(files.at(-2));assert.deepEqual(await Promise.all(tables.map(rows)),before);const baseline=await rows('legacy_ticket_payments');assert.equal(baseline.length,3);await db.exec(files.at(-2));assert.deepEqual(await rows('legacy_ticket_payments'),baseline);
   const priorUpgrade=await Promise.all(tables.map(rows));await db.exec(files.at(-1));assert.deepEqual(await Promise.all(tables.map(rows)),priorUpgrade);assert.deepEqual(await rows('legacy_ticket_payments'),baseline);await db.exec(files.at(-1));assert.deepEqual(await Promise.all(tables.map(rows)),priorUpgrade);
+  await db.exec(analyticsMigration);
   await t.test('Opening cash includes old payments, their pre-existing reversals and distribution money without inventing dates',async()=>{const result=await stats();assert.equal(result.collectedTotal,45);assert.equal(result.collectedCashTotal,30);assert.equal(result.collectedYapeTotal,0);assert.equal(result.collectedOtherTotal,15);assert.equal(result.legacyWithoutDate,1);assert.equal(result.collectedNow,-5);assert.equal(result.totalStudents,2);});
+  await run('Statistics snapshot reconciles cash and current counters without changing any record',async()=>{
+   const before=await Promise.all(tables.map(rows));const source=(await q('SELECT public.ticket_analytics_source() v'))[0].v;const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/Lima'});const report=buildAnalytics(source,{from:'1900-01-01',to:day,group:'all',actor:'all'});const current=await stats();assert.equal(report.summary.tickets,current.totalTickets);assert.equal(report.summary.picked,current.pickedUp);assert.equal(report.finance.accumulated,current.collectedTotal);assert.equal(report.finance.cash,current.collectedCashTotal);assert.equal(report.finance.yape,current.collectedYapeTotal);assert.deepEqual(await Promise.all(tables.map(rows)),before);
+   await db.exec('SET ROLE authenticated');await q('SELECT public.ticket_analytics_source()');await db.exec('RESET ROLE;SET ROLE anon');await reject(()=>q('SELECT public.ticket_analytics_source()'),'42501');await db.exec('RESET ROLE');
+   await q("SELECT set_config('request.jwt.claims','{\"is_anonymous\":true}',false)");await reject(()=>q('SELECT public.ticket_analytics_source()'),'42501');
+  });
   await run('Explicit Prepagado records zero, preserves existing paid tickets and keeps cash unchanged with the acting user',async()=>{
    const person=await save('CONFIRM');const paid=(await assign(person,[1800],'yape')).tickets[0];const pending=(await assign(person,[1801,1802])).tickets;const balance=await stats();const originalPayments=(await rows('faculty_payments')).length;await login(other);
    const delivered=await deliver([paid,...pending],'prepaid');const previous=delivered.find(ticket=>ticket.id===paid.id);
@@ -35,6 +43,7 @@ test('Delivery reactivation preserves prepaid tickets and reconciles legacy, dis
    const cash=await stats();for(const key of ['collectedTotal','collectedCashTotal','collectedYapeTotal','collectedNow','collectedCash','collectedYape'])assert.equal(cash[key],balance[key]);
    const entries=await q("SELECT amount,method,actor_id FROM public.faculty_payments WHERE ticket_id=ANY($1)",[pending.map(ticket=>ticket.id)]);assert.equal(entries.length,2);assert(entries.every(entry=>Number(entry.amount)===0&&entry.method==='prepaid'&&entry.actor_id===other));assert.equal((await rows('faculty_payments')).length,originalPayments+2);
    const event=(await q('SELECT * FROM public.ticket_movements WHERE id=$1',[delivered[0].movement_id]))[0];assert.equal(event.payment_method,'prepaid');assert(event.ticket_snapshots.every(ticket=>Number(ticket.collected_now)===0));assert.equal(event.actor_id,other);
+   const analyticsSource=(await q('SELECT public.ticket_analytics_source() v'))[0].v;const analytics=buildAnalytics(analyticsSource,{from:'1900-01-01',to:new Date().toLocaleDateString('en-CA',{timeZone:'America/Lima'}),group:'all',actor:'all'});assert.equal(analytics.summary.prepaid,2);assert.equal(analytics.summary.picked,3);assert.equal(analytics.finance.accumulated,cash.collectedTotal);assert.equal(analyticsSource.movements.find(movement=>movement.id===event.id).items.length,3);assert.equal(analytics.activity.delivered,3);
    const audit=await q("SELECT * FROM public.faculty_changes WHERE entity_id=$1 AND after_data->>'payment_method' LIKE 'prepaid%'",[pending[0].id]);assert(audit.some(event=>event.actor_id===other));await reject(()=>deliver([paid,...pending],'prepaid'));
   });
   await run('Prepagado survives undo and redelivery, and grouped cancellation changes no cash',async()=>{

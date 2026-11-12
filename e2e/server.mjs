@@ -14,7 +14,7 @@ const server = createServer(async (request, response) => {
       file = resolve(root, 'static', decodeURIComponent(url.pathname.slice('/_next/static/'.length)));
       if (!file.startsWith(resolve(root, 'static') + sep)) { response.writeHead(403); response.end(); return; }
       contentType = mime[extname(file)] || 'application/octet-stream';
-    } else if (['/', '/dashboard', '/distribution', '/distribution/history', '/distribution/changes', '/students', '/movements', '/extras', '/import'].includes(url.pathname)) {
+    } else if (['/', '/statistics', '/dashboard', '/distribution', '/distribution/history', '/distribution/changes', '/students', '/movements', '/extras', '/import'].includes(url.pathname)) {
       const route = url.pathname === '/' ? 'index' : url.pathname.slice(1);
       const rsc = request.headers.rsc === '1' || url.searchParams.has('_rsc');
       file = resolve(root, 'server/app', `${route}.${rsc ? 'rsc' : 'html'}`);

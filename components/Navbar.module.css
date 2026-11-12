@@ -27,3 +27,5 @@
 
 .locked { color: var(--text-tertiary); }
 .lockedLabel { display: block; font-size: .57rem; font-weight: 450; margin-top: 2px; }
+
+@media(max-width:420px) { .mobileNav { gap:2px;padding-left:5px;padding-right:5px; } .mobileLabel { font-size:.57rem; } .mobileLink { min-width:0; } }
