@@ -268,6 +268,8 @@ Ejecutar completo supabase/migrations/20261110_prepaid_delivery.sql (copia ident
 
 ## Dashboard de Estadisticas
 
+/pending (Deudores) lista a los participantes que ya recogieron su pollada y aun tienen el pago pendiente: tickets activos recogidos sin pago registrado, monto adeudado, fecha de la ultima entrega y encargado. Permite buscar, filtrar por grupo, exportar CSV y abrir la ficha en Reparto para registrar el pago. Es de solo lectura y reutiliza la funcion ticket_analytics_source del dashboard de Estadisticas (no requiere otra migracion). Prepagado cuenta como pagado.
+
 /statistics contiene indicadores actuales, pagos por medio, cobertura del padron, recojo y pagos por grupo, cruce de pago/recojo, actividad temporal, caja neta y acumulada, anulaciones, encargados, horarios y origen de ingresos. Incluye pendientes buscables, enlaces a Reparto/Entregas y CSV del reporte completo. El grupo filtra todos los datos; fechas y encargado filtran la actividad, sin alterar el estado actual. Los grupos historicos usan la ficha actual, y la caja conserva el historial de tickets archivados. Prepagado suma un ticket pagado y cero ingreso; los saldos sin fecha se separan de las series temporales.
 
 Instalar supabase/migrations/20261112_statistics_dashboard.sql (copia identica artifacts/faculty-roster/activar_dashboard_estadisticas.sql) despues de las migraciones de Entregas y Prepagado. Solo crea una funcion STABLE de lectura para operadores autenticados: una misma instantanea consistente con campos minimos, una llamada por actualizacion y agregacion en el servidor. No modifica filas ni otorga escrituras. La interfaz conserva busqueda/filtros durante actualizaciones, cancela solicitudes antiguas y pausa refrescos mientras se interactua.

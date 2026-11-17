@@ -12,6 +12,7 @@ import * as facultyExport from '../lib/faculty-export.mjs';
 import * as assignmentHistory from '../lib/assignment-history.mjs';
 import * as delivery from '../lib/delivery.mjs';
 import * as analytics from '../lib/analytics.mjs';
+import * as pending from '../lib/pending.mjs';
 import { requireDeliveryEnabled, requireLegacyAdminEnabled } from '../lib/module-mode.mjs';
 
 const NextResponse = { json: (value, options) => Response.json(value, options) };
@@ -21,10 +22,10 @@ async function compile(path, dependencies, exports) {
 }
 async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
-  const methods = { analytics:['GET'], students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
-  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...batchPayments, ...assignmentHistory, ...delivery, ...analytics, requireDeliveryEnabled: deliveryEnabled ? requireDeliveryEnabled : () => { throw new api.HttpError('Temporalmente inhabilitado',423); }, requireLegacyAdminEnabled, fetchAll, cashReport }, methods);
+  const methods = { analytics:['GET'], pending:['GET'], students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
+  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...batchPayments, ...assignmentHistory, ...delivery, ...analytics, ...pending, requireDeliveryEnabled: deliveryEnabled ? requireDeliveryEnabled : () => { throw new api.HttpError('Temporalmente inhabilitado',423); }, requireLegacyAdminEnabled, fetchAll, cashReport }, methods);
 }
-for (const [route, methods] of Object.entries({ analytics:['GET'], students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
+for (const [route, methods] of Object.entries({ analytics:['GET'], pending:['GET'], students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
     const client = { auth: { getUser: async () => ({ data: { user: null }, error: null }) }, from: () => assert.fail('Database must not be accessed') };
     const response = await (await handlers(route, client))[method]({ json: () => assert.fail('Body must not be read'), formData: () => assert.fail('File must not be read') });
@@ -274,6 +275,11 @@ test('Delivery submits every expected ticket version and rejects fabricated prep
 });
 
 
+test('Pending payments validates the group before reading and lists picked-up unpaid tickets from the read-only snapshot',async()=>{
+ const invalid=await handlers('pending',authenticated(()=>assert.fail('No query for invalid filters')));assert.equal((await invalid.GET({url:'http://localhost/api/pending?group=bad'})).status,400);
+ const calls=[];const snapshot={students:[{id:'d',name:'DANIEL',recipient_type:'external'}],tickets:[{id:'d1',student_id:'d',ticket_number:6,is_paid:false,is_picked_up:true,unit_price:12.5}],movements:[]};
+ const route=await handlers('pending',authenticated(name=>{calls.push(name);return{data:snapshot,error:null};}));const response=await route.GET({url:'http://localhost/api/pending'});assert.equal(response.status,200);assert.deepEqual(calls,['ticket_analytics_source']);assert.deepEqual((await response.json()).summary,{people:1,tickets:1,due:12.5});
+});
 test('Analytics rejects invalid dates before reading the snapshot and reports missing activation explicitly',async()=>{
  const route=await handlers('analytics',authenticated(()=>assert.fail('No query for invalid filters')));assert.equal((await route.GET({url:'http://localhost/api/analytics?from=2026-99-99'})).status,400);
  const missing=await handlers('analytics',authenticated(()=>({data:null,error:{code:'PGRST202'}})));assert.equal((await missing.GET({url:'http://localhost/api/analytics'})).status,503);
