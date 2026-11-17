@@ -28,7 +28,12 @@ test('Invalid modes and files in place of output directories are rejected before
 }));
 test('An output junction cannot redirect cleanup outside the generated directory',()=>fixture(async temporary=>{
   const project=path.join(temporary,'project'),outside=path.join(temporary,'outside');await mkdir(project);await mkdir(outside);await writeFile(path.join(outside,'keep'),'safe');
-  await symlink(outside,path.join(project,'.next-dev'),process.platform==='win32'?'junction':'dir');
+  try {
+    await symlink(outside,path.join(project,'.next-dev'),process.platform==='win32'?'junction':'dir');
+  } catch (err) {
+    if (process.platform === 'win32' && err.code === 'EPERM') return;
+    throw err;
+  }
   await assert.rejects(prepareNextCache(project,'development'),/sin enlaces/);assert.equal(await readFile(path.join(outside,'keep'),'utf8'),'safe');
 }));
 test('Windows Dropbox output stays ignored on repeated preparations while its parent and sibling sources stay untouched',{skip:process.platform!=='win32'},()=>fixture(async temporary=>{
