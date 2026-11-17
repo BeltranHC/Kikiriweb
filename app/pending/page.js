@@ -62,7 +62,7 @@ export default function PendingPage() {
       const result = await requestJson('/api/pending/tickets?' + new URLSearchParams({ studentId: row.id }));
       if (!result.tickets.length) { setPaymentError('No se encontraron tickets pendientes de pago para este participante.'); setPaymentLoading(false); return; }
       setPaymentTarget({ row, tickets: result.tickets });
-      setSelectedIds(result.tickets.filter(t => !t.is_paid).map(t => t.id));
+      setSelectedIds(result.tickets.map(t => t.id));
     } catch (issue) { setPaymentError(issue.message); }
     finally { setPaymentLoading(false); }
   }, []);
@@ -81,15 +81,14 @@ export default function PendingPage() {
     setConfirming(false); setPaymentError('');
     setSelectedIds(current => current.includes(id) ? current.filter(v => v !== id) : [...current, id]);
   };
-  const selectAll = () => { setConfirming(false); setPaymentError(''); setSelectedIds(paymentTarget?.tickets.filter(t => !t.is_paid).map(t => t.id) || []); };
+  const selectAll = () => { setConfirming(false); setPaymentError(''); setSelectedIds(paymentTarget?.tickets.map(t => t.id) || []); };
   const clearSelection = () => { setConfirming(false); setPaymentError(''); setSelectedIds([]); };
 
   const paymentSummary = useMemo(() => {
     if (!paymentTarget) return { selected: 0, changing: 0, total: 0 };
     const selected = paymentTarget.tickets.filter(t => selectedIds.includes(t.id));
-    const changing = selected.filter(t => !t.is_paid);
-    const total = changing.reduce((sum, t) => sum + Math.round(Number(t.unit_price ?? TICKET_PRICE) * 100), 0) / 100;
-    return { selected: selected.length, changing: changing.length, total, unchanged: selected.length - changing.length };
+    const total = selected.reduce((sum, t) => sum + Math.round(Number(t.unit_price ?? TICKET_PRICE) * 100), 0) / 100;
+    return { selected: selected.length, changing: selected.length, total };
   }, [paymentTarget, selectedIds]);
 
   const submitPayment = async (event) => {
@@ -104,10 +103,10 @@ export default function PendingPage() {
       const body = {
         studentId: paymentTarget.row.id,
         tickets,
-        condition: paymentMethod,
+        paymentMethod,
         expectedTotal: paymentSummary.total,
       };
-      await requestJson('/api/faculty/payments', jsonBody('PATCH', body));
+      await requestJson('/api/pending/tickets', jsonBody('PATCH', body));
       setPaymentTarget(null);
       refresh();
     } catch (issue) { setPaymentError(issue.message); setConfirming(false); }
@@ -179,16 +178,15 @@ export default function PendingPage() {
               <input type="checkbox" checked={selectedIds.includes(ticket.id)} onChange={() => toggleTicket(ticket.id)} aria-label={`Seleccionar ticket ${ticket.ticket_number}`} />
               <span>
                 <strong>#{formatTicketNumber(ticket.ticket_number)}</strong>
-                <small>{ticket.is_paid ? 'Entregado como Prepagado' : 'Sin pago registrado'} · S/ {Number(ticket.unit_price ?? TICKET_PRICE).toFixed(2)}</small>
+                <small>{(ticket.payment_method || '').startsWith('prepaid') ? 'Entregado como Prepagado' : 'Sin pago registrado'} · S/ {Number(ticket.unit_price ?? TICKET_PRICE).toFixed(2)}</small>
               </span>
             </label>)}
           </fieldset>
           <PaymentOptions label="Método de pago" value={paymentMethod} onChange={method => { setConfirming(false); setPaymentError(''); setPaymentMethod(method); }} disabled={saving} />
           <div role="status" className={styles.paymentTotal}>
-            <strong>{paymentSummary.selected} tickets seleccionados</strong>
+            <strong>{paymentSummary.selected} {paymentSummary.selected === 1 ? 'ticket seleccionado' : 'tickets seleccionados'}</strong>
             <span>{paymentSummary.changing} {paymentSummary.changing === 1 ? 'ticket por pagar' : 'tickets por pagar'}</span>
             <b>Total a pagar: S/ {paymentSummary.total.toFixed(2)}</b>
-            {paymentSummary.unchanged > 0 && <small>{paymentSummary.unchanged} sin cambios: ya estaban pagados.</small>}
           </div>
           {confirming && <p className={styles.paymentWarning} role="alert">Confirma el pago de {paymentSummary.changing} tickets por S/ {paymentSummary.total.toFixed(2)} {paymentMethod === 'cash' ? 'en efectivo' : 'con Yape'}. Se guardará tu usuario.</p>}
           {paymentError && <p role="alert" className="text-danger">{paymentError}</p>}
