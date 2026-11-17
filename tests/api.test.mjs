@@ -278,7 +278,7 @@ test('Delivery submits every expected ticket version and rejects fabricated prep
 test('Pending payments validates the group before reading and lists picked-up unpaid tickets from the read-only snapshot',async()=>{
  const invalid=await handlers('pending',authenticated(()=>assert.fail('No query for invalid filters')));assert.equal((await invalid.GET({url:'http://localhost/api/pending?group=bad'})).status,400);
  const calls=[];const snapshot={students:[{id:'d',name:'DANIEL',recipient_type:'external'}],tickets:[{id:'d1',student_id:'d',ticket_number:6,is_paid:false,is_picked_up:true,unit_price:12.5}],movements:[]};
- const route=await handlers('pending',authenticated(name=>{calls.push(name);return{data:snapshot,error:null};}));const response=await route.GET({url:'http://localhost/api/pending'});assert.equal(response.status,200);assert.deepEqual(calls,['ticket_analytics_source']);assert.deepEqual((await response.json()).summary,{people:1,tickets:1,due:12.5});
+ const route=await handlers('pending',authenticated(name=>{calls.push(name);return{data:snapshot,error:null};}));const response=await route.GET({url:'http://localhost/api/pending'});assert.equal(response.status,200);assert.deepEqual(calls,['ticket_analytics_source']);assert.deepEqual((await response.json()).summary,{people:1,tickets:1,prepaid:0,due:12.5});
 });
 test('Analytics rejects invalid dates before reading the snapshot and reports missing activation explicitly',async()=>{
  const route=await handlers('analytics',authenticated(()=>assert.fail('No query for invalid filters')));assert.equal((await route.GET({url:'http://localhost/api/analytics?from=2026-99-99'})).status,400);

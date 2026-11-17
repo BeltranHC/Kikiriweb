@@ -18,7 +18,7 @@ const stamp = value => value ? new Date(value).toLocaleString('es-PE', { timeZon
 const fold = value => value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 export default function PendingPage() {
-  const [group, setGroup] = useState('all'), [data, setData] = useState(null), [refreshing, setRefreshing] = useState(false), [error, setError] = useState('');
+  const [group, setGroup] = useState('all'), [status, setStatus] = useState('all'), [data, setData] = useState(null), [refreshing, setRefreshing] = useState(false), [error, setError] = useState('');
   const controller = useRef(null);
   const { query, page, setQuery, setPage } = useSearchState('pending');
   const refresh = useCallback(async () => {
@@ -33,8 +33,8 @@ export default function PendingPage() {
 
   const rows = useMemo(() => {
     const term = fold(query.trim().replace(/^#/, ''));
-    return (data?.rows || []).filter(row => !term || fold(`${row.name} ${row.code} ${row.deliveredBy.join(' ')} ${row.tickets.map(ticket => `${ticket.number} ${formatTicketNumber(ticket.number)}`).join(' ')}`).includes(term));
-  }, [data, query]);
+    return (data?.rows || []).filter(row => (status === 'all' || row.tickets.some(ticket => ticket.status === status)) && (!term || fold(`${row.name} ${row.code} ${row.deliveredBy.join(' ')} ${row.tickets.map(ticket => `${ticket.number} ${formatTicketNumber(ticket.number)}`).join(' ')}`).includes(term)));
+  }, [data, query, status]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE)), currentPage = Math.min(page, pages), visible = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const exportReport = () => {
     const url = URL.createObjectURL(new Blob([pendingCSV(data, value => value ? stamp(value) : '')], { type: 'text/csv;charset=utf-8' }));
@@ -56,28 +56,29 @@ export default function PendingPage() {
     {data && <div className={styles.content} aria-busy={refreshing}>
       <section className={styles.metrics} aria-label="Resumen de pagos pendientes">
         <article className={styles.metric} aria-label="Participantes que deben"><span><Users size={18} aria-hidden="true" />Participantes que deben</span><strong>{number(s.people)}</strong></article>
-        <article className={styles.metric} aria-label="Polladas recogidas sin pagar"><span><Ticket size={18} aria-hidden="true" />Polladas recogidas sin pagar</span><strong>{number(s.tickets)}</strong></article>
+        <article className={styles.metric} aria-label="Polladas recogidas sin pagar"><span><Ticket size={18} aria-hidden="true" />Polladas recogidas sin pagar</span><strong>{number(s.tickets)}</strong><small>{number(s.prepaid)} como Prepagado · {number(s.tickets - s.prepaid)} sin pago registrado</small></article>
         <article className={styles.metric} aria-label="Monto por cobrar"><span><Banknote size={18} aria-hidden="true" />Monto por cobrar</span><strong>{money(s.due)}</strong><small>Según el precio de cada ticket</small></article>
       </section>
       <section className={styles.panel} aria-label="Lista de participantes con pago pendiente">
         <div className={styles.filters}>
           <div className="input-group"><label htmlFor="pending-search">Buscar participante, código o ticket</label><div className={styles.search}><Search size={18} /><input id="pending-search" type="search" className="input-field" value={query} onChange={event => setQuery(event.target.value)} placeholder="Nombre, código o número" /></div></div>
           <div className="input-group"><label htmlFor="pending-group">Grupo</label><select id="pending-group" className="input-field" value={group} onChange={event => { setGroup(event.target.value); setPage(1); }}><option value="all">Todos los grupos</option>{data.options.groups.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></div>
+          <div className="input-group"><label htmlFor="pending-status">Situación</label><select id="pending-status" className="input-field" value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}><option value="all">Todas</option><option value="prepaid">Entregado como Prepagado</option><option value="unpaid">Sin pago registrado</option></select></div>
         </div>
         <p className={styles.updated}>{refreshing ? 'Actualizando...' : `${number(rows.length)} de ${number(data.rows.length)} participantes · Actualizado: ${stamp(data.generatedAt)}`}</p>
         {rows.length ? <div className={styles.tableScroll}><table>
           <thead><tr><th>Participante</th><th>Tickets recogidos sin pagar</th><th>Debe</th><th>Última entrega</th><th>Acciones</th></tr></thead>
           <tbody>{visible.map(row => <tr key={row.id}>
             <td><strong>{row.name}</strong><small>{row.code || 'Sin código'} · {row.groupLabel}</small></td>
-            <td><div className={styles.tickets}>{row.tickets.map(ticket => <span className="badge badge-warning" key={ticket.id}>#{formatTicketNumber(ticket.number)}</span>)}</div><small>{row.count} de {row.assigned} {row.assigned === 1 ? 'ticket asignado' : 'tickets asignados'}</small></td>
+            <td><div className={styles.tickets}>{row.tickets.map(ticket => <span className={`badge ${ticket.status === 'prepaid' ? 'badge-info' : 'badge-warning'}`} key={ticket.id} title={ticket.status === 'prepaid' ? 'Entregado como Prepagado' : 'Sin pago registrado'}>#{formatTicketNumber(ticket.number)}</span>)}</div><small>{[row.prepaid && `${row.prepaid} como Prepagado`, row.count - row.prepaid && `${row.count - row.prepaid} sin pago registrado`].filter(Boolean).join(' · ')} · {row.assigned} {row.assigned === 1 ? 'ticket asignado' : 'tickets asignados'}</small></td>
             <td><strong className={styles.due}>{money(row.due)}</strong></td>
             <td>{stamp(row.pickedAt)}<small>{row.deliveredBy.length ? `Entregó: ${row.deliveredBy.join(', ')}` : 'Encargado no registrado'}</small></td>
             <td><div className={styles.rowLinks}>{row.id === 'extras' ? <span>Usa el lector de Entregas para consultarlos.</span> : <><Link href="/distribution" onClick={() => openPerson(row, 'distribution')}>Registrar pago</Link><Link href="/dashboard" onClick={() => openPerson(row, 'dashboard')}>Ver entrega</Link></>}</div></td>
           </tr>)}</tbody>
-        </table></div> : <p className={styles.empty}>{data.rows.length ? 'Ningún participante coincide con la búsqueda.' : 'Nadie ha recogido su pollada con el pago pendiente.'}</p>}
+        </table></div> : <p className={styles.empty}>{data.rows.length ? 'Ningún participante coincide con la búsqueda o los filtros.' : 'Nadie ha recogido su pollada con el pago pendiente.'}</p>}
         {pages > 1 && <div className={styles.pagination}><span>Página {currentPage} de {pages}</span><button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Anterior</button><button className="btn btn-secondary btn-sm" disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>Siguiente</button></div>}
       </section>
-      <p className={styles.note}>Solo se incluyen tickets activos marcados como recogidos y sin pago registrado. Prepagado cuenta como pagado. El pago se registra en la ficha del participante, en Reparto.</p>
+      <p className={styles.note}>Se incluyen los tickets activos ya recogidos que se entregaron como Prepagado (sin cobro en caja) o que no tienen pago registrado. Para cobrar, abre la ficha del participante en Reparto: anula el Prepagado y registra el pago en efectivo o Yape; al hacerlo sale de esta lista.</p>
     </div>}
   </div>;
 }

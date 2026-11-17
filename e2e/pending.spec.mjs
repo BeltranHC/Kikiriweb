@@ -25,16 +25,19 @@ test('Deudores lists who picked up without paying, filters, exports and never wr
   const state = await fixture(page);
   await page.goto('/pending');
   await expect(page.getByRole('heading', { name: 'Recogieron sin pagar', exact: true })).toBeVisible();
-  await expect(metric(page, 'Participantes que deben')).toHaveText('2');
-  await expect(metric(page, 'Polladas recogidas sin pagar')).toHaveText('2');
-  await expect(metric(page, 'Monto por cobrar')).toContainText('27.50');
+  await expect(metric(page, 'Participantes que deben')).toHaveText('3');
+  await expect(metric(page, 'Polladas recogidas sin pagar')).toHaveText('3');
+  await expect(metric(page, 'Monto por cobrar')).toContainText('42.50');
   const table = page.getByRole('table');
   await expect(table).toContainText('ANA ÁLVAREZ'); await expect(table).toContainText('#0002'); await expect(table).toContainText('two@example.test');
-  await expect(table).toContainText('DANIEL EXTERNO'); await expect(table).not.toContainText('BRUNO');
+  await expect(table).toContainText('DANIEL EXTERNO'); await expect(table).toContainText('BRUNO PÉREZ'); await expect(table).toContainText('1 como Prepagado'); await expect(table).not.toContainText('CARMEN');
   await page.screenshot({ path: 'artifacts/ui-preview/pending-desktop.png', fullPage: true, animations: 'disabled' });
   await page.getByLabel('Buscar participante, código o ticket').fill('daniel');
   await expect(table).not.toContainText('ANA');
   await page.getByLabel('Buscar participante, código o ticket').fill('');
+  await page.getByLabel('Situación', { exact: true }).selectOption('prepaid');
+  await expect(table).toContainText('BRUNO'); await expect(table).not.toContainText('DANIEL');
+  await page.getByLabel('Situación', { exact: true }).selectOption('all');
   await page.getByLabel('Grupo', { exact: true }).selectOption('semester:1');
   await expect(metric(page, 'Participantes que deben')).toHaveText('1'); await expect(table).not.toContainText('DANIEL');
   const download = page.waitForEvent('download');
@@ -50,11 +53,11 @@ test('Deudores fits a phone without horizontal page scroll and shows the empty s
   await page.setViewportSize({ width: 390, height: 844 });
   const state = await fixture(page);
   await page.goto('/pending');
-  await expect(metric(page, 'Participantes que deben')).toHaveText('2');
+  await expect(metric(page, 'Participantes que deben')).toHaveText('3');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole('navigation', { name: 'Navegación móvil' }).getByRole('link', { name: 'Deudores' })).toHaveAttribute('aria-current', 'page');
   await page.screenshot({ path: 'artifacts/ui-preview/pending-mobile.png', fullPage: true, animations: 'disabled' });
-  for (const ticket of state.source.tickets) ticket.is_paid = true;
+  for (const ticket of state.source.tickets) { ticket.is_paid = true; ticket.payment_method = 'en_momento_efectivo|one@example.test'; }
   await page.getByRole('button', { name: 'Actualizar', exact: true }).click();
   await expect(page.getByText('Nadie ha recogido su pollada con el pago pendiente.')).toBeVisible();
 });
