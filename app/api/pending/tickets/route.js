@@ -3,11 +3,8 @@ import { requireSession, apiError, HttpError } from '@/lib/api';
 import { requireDeliveryEnabled } from '@/lib/module-mode.mjs';
 import { validateUuid, ValidationError } from '@/lib/validation.mjs';
 import { fetchAll } from '@/lib/pagination.mjs';
-import { TICKET_PRICE } from '@/lib/domain.mjs';
 import { ticketStatus } from '@/lib/pending.mjs';
 export const dynamic = 'force-dynamic';
-
-const isPrepaidTicket = ticket => !!ticket.is_paid && (ticket.payment_method || '').split('|')[0] === 'prepaid';
 
 // Valida participante y versiones de los tickets enviados por el modal de Deudores.
 function parseSelection(body) {
@@ -23,19 +20,11 @@ function parseSelection(body) {
   return { studentId, tickets };
 }
 
-async function loadTicket(supabase, item, studentId) {
-  const { data: ticket, error } = await supabase.from('tickets').select('*').eq('id', item.id).eq('student_id', studentId).is('deleted_at', null).maybeSingle();
-  if (error) throw error;
-  if (!ticket) throw new HttpError('Ticket no encontrado', 404);
-  if (ticket.assignment_updated_at !== item.updated_at) throw new HttpError(`El ticket #${ticket.ticket_number} cambió. Actualiza la lista antes de continuar.`, 409);
-  return ticket;
-}
-
-// Anula el Prepagado (reverso de S/ 0) y devuelve la nueva versión del ticket.
-async function voidPrepaid(supabase, ticket, studentId, expectedUpdatedAt) {
-  const { data, error } = await supabase.rpc('set_faculty_ticket_payment', { p_ticket_id: ticket.id, p_student_id: studentId, p_action: 'void', p_method: null, p_expected_updated_at: expectedUpdatedAt });
-  if (error) throw error;
-  return data?.ticket?.assignment_updated_at;
+// Cobro y "No recogió" se guardan con una sola llamada: la base los aplica a todos los tickets o a ninguno.
+const ACTIVATION = 'Cobro en Deudores pendiente de activación. Ejecuta supabase/migrations/20261125_atomic_pending_payments.sql.';
+function rpcError(error) {
+  if (error?.code === 'PGRST202') return new HttpError(ACTIVATION, 503);
+  return error;
 }
 
 // Retorna los tickets de un participante que siguen pendientes: recogidos sin pagar o como Prepagado,
@@ -56,8 +45,8 @@ export async function GET(request) {
   } catch (error) { return apiError(error); }
 }
 
-// Registra el pago en efectivo o Yape para los tickets seleccionados de un participante
-// Maneja tanto tickets sin pago registrado como tickets entregados como Prepagado
+// Cobra en efectivo o Yape los tickets elegidos, incluidos los entregados como Prepagado (se anula el Prepagado
+// y se cobra en la misma transacción). La base rechaza todo si cambió un ticket o el total confirmado.
 export async function PATCH(request) {
   try {
     const { supabase } = await requireSession();
@@ -66,32 +55,11 @@ export async function PATCH(request) {
     const { studentId, tickets } = parseSelection(body);
     const paymentMethod = body.paymentMethod;
     if (!['cash', 'yape'].includes(paymentMethod)) throw new ValidationError('Indica efectivo o Yape');
-
-    let changed = 0;
-    let totalCents = 0;
-
-    for (const item of tickets) {
-      const ticket = await loadTicket(supabase, item, studentId);
-      if (ticket.no_show_at) throw new HttpError(`El ticket #${ticket.ticket_number} figura como No recogió. Deshaz esa marca antes de cobrarlo.`, 409);
-      let expectedUpdatedAt = item.updated_at;
-      // Si fue entregado como Prepagado, primero se anula el prepagado (S/ 0)
-      if (isPrepaidTicket(ticket)) expectedUpdatedAt = await voidPrepaid(supabase, ticket, studentId, expectedUpdatedAt);
-
-      // Se registra el pago efectivo o Yape
-      const { error: payErr } = await supabase.rpc('set_faculty_ticket_payment', {
-        p_ticket_id: ticket.id,
-        p_student_id: studentId,
-        p_action: 'pay',
-        p_method: paymentMethod,
-        p_expected_updated_at: expectedUpdatedAt,
-      });
-      if (payErr) throw payErr;
-
-      changed++;
-      totalCents += Math.round(Number(ticket.unit_price ?? TICKET_PRICE) * 100);
-    }
-
-    return NextResponse.json({ studentId, changed, total: totalCents / 100 });
+    const expectedTotal = body.expectedTotal;
+    if (typeof expectedTotal !== 'number' || !Number.isFinite(expectedTotal) || expectedTotal < 0) throw new ValidationError('Confirma nuevamente el total a cobrar');
+    const { data, error } = await supabase.rpc('pay_pending_tickets', { p_student_id: studentId, p_tickets: tickets, p_method: paymentMethod, p_expected_total: expectedTotal });
+    if (error) throw rpcError(error);
+    return NextResponse.json({ studentId, changed: data.changed, total: Number(data.total) });
   } catch (error) { return apiError(error); }
 }
 
@@ -104,22 +72,8 @@ export async function POST(request) {
     const body = await request.json();
     const { studentId, tickets } = parseSelection(body);
     if (typeof body.noShow !== 'boolean') throw new ValidationError('Indica si el participante recogió o no');
-
-    let changed = 0;
-    for (const item of tickets) {
-      const ticket = await loadTicket(supabase, item, studentId);
-      if (!('no_show_at' in ticket)) throw new HttpError('Opción pendiente de activación. Ejecuta supabase/migrations/20261121_ticket_no_show.sql.', 503);
-      let expectedUpdatedAt = item.updated_at;
-      if (body.noShow) {
-        if (ticket.no_show_at) continue;
-        if (ticket.is_paid && !isPrepaidTicket(ticket)) throw new HttpError(`El ticket #${ticket.ticket_number} tiene un pago registrado; no se puede marcar como No recogió.`, 409);
-        if (isPrepaidTicket(ticket)) expectedUpdatedAt = await voidPrepaid(supabase, ticket, studentId, expectedUpdatedAt);
-      } else if (!ticket.no_show_at) continue;
-      const { error } = await supabase.rpc('set_ticket_no_show', { p_ticket_id: ticket.id, p_student_id: studentId, p_expected_updated_at: expectedUpdatedAt, p_no_show: body.noShow });
-      if (error?.code === 'PGRST202') throw new HttpError('Opción pendiente de activación. Ejecuta supabase/migrations/20261121_ticket_no_show.sql.', 503);
-      if (error) throw error;
-      changed++;
-    }
-    return NextResponse.json({ studentId, changed, noShow: body.noShow });
+    const { data, error } = await supabase.rpc('set_pending_no_show', { p_student_id: studentId, p_tickets: tickets, p_no_show: body.noShow });
+    if (error) throw rpcError(error);
+    return NextResponse.json({ studentId, changed: data.changed, noShow: body.noShow });
   } catch (error) { return apiError(error); }
 }

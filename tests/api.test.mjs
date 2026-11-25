@@ -280,6 +280,17 @@ test('Pending payments validates the group before reading and lists picked-up un
  const calls=[];const snapshot={students:[{id:'d',name:'DANIEL',recipient_type:'external'}],tickets:[{id:'d1',student_id:'d',ticket_number:6,is_paid:false,is_picked_up:true,unit_price:12.5}],movements:[]};
  const route=await handlers('pending',authenticated(name=>{calls.push(name);return{data:snapshot,error:null};}));const response=await route.GET({url:'http://localhost/api/pending'});assert.equal(response.status,200);assert.deepEqual(calls,['ticket_analytics_source']);assert.deepEqual((await response.json()).summary,{people:1,tickets:1,prepaid:0,due:12.5,unpickedPeople:0,unpicked:0,unpickedDue:0,noShowPeople:0,noShow:0});
 });
+test('Deudores sends each payment or No recogió as one all-or-nothing call and validates the confirmed total first',async()=>{
+ const id='11111111-1111-4111-8111-111111111111',tickets=[{id:'22222222-2222-4222-8222-222222222222',updated_at:'2026-11-25T10:00:00.123456+00:00'},{id:'33333333-3333-4333-8333-333333333333',updated_at:'2026-11-25T10:00:01+00:00'}];
+ const calls=[];const route=await handlers('pending/tickets',authenticated(async(name,args)=>{calls.push({name,args});return{data:{changed:2,total:'30.00'},error:null};}));
+ for(const expectedTotal of [undefined,'30',-1,Infinity])assert.equal((await route.PATCH({json:async()=>({studentId:id,tickets,paymentMethod:'cash',expectedTotal})})).status,400);
+ assert.equal((await route.PATCH({json:async()=>({studentId:id,tickets,paymentMethod:'prepaid',expectedTotal:30})})).status,400);assert.equal(calls.length,0);
+ const paid=await route.PATCH({json:async()=>({studentId:id,tickets,paymentMethod:'yape',expectedTotal:30})});assert.equal(paid.status,200);assert.deepEqual(await paid.json(),{studentId:id,changed:2,total:30});
+ assert.deepEqual(calls,[{name:'pay_pending_tickets',args:{p_student_id:id,p_tickets:tickets,p_method:'yape',p_expected_total:30}}]);
+ const marked=await route.POST({json:async()=>({studentId:id,tickets,noShow:true})});assert.equal(marked.status,200);assert.deepEqual(calls[1],{name:'set_pending_no_show',args:{p_student_id:id,p_tickets:tickets,p_no_show:true}});
+ const missing=await handlers('pending/tickets',authenticated(()=>({data:null,error:{code:'PGRST202'}})));assert.equal((await missing.PATCH({json:async()=>({studentId:id,tickets,paymentMethod:'cash',expectedTotal:30})})).status,503);
+ const conflict=await handlers('pending/tickets',authenticated(()=>({data:null,error:{code:'P0001',message:'El ticket #22 ya tiene un pago registrado. No se cobro ningun ticket.'}})));const response=await conflict.PATCH({json:async()=>({studentId:id,tickets,paymentMethod:'cash',expectedTotal:30})});assert.equal(response.status,409);assert.match((await response.json()).error,/No se cobro ningun ticket/);
+});
 test('Analytics rejects invalid dates before reading the snapshot and reports missing activation explicitly',async()=>{
  const route=await handlers('analytics',authenticated(()=>assert.fail('No query for invalid filters')));assert.equal((await route.GET({url:'http://localhost/api/analytics?from=2026-99-99'})).status,400);
  const missing=await handlers('analytics',authenticated(()=>({data:null,error:{code:'PGRST202'}})));assert.equal((await missing.GET({url:'http://localhost/api/analytics'})).status,503);
