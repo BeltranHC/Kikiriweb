@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { RefreshCw, Download, HandCoins, Users, Ticket, Banknote, Search, X, Save, UserX } from 'lucide-react';
+import { RefreshCw, Download, HandCoins, Users, Ticket, Banknote, Search, X, Save, UserX, History } from 'lucide-react';
 import { pendingCSV, DEBT_STATUSES } from '@/lib/pending.mjs';
 import { APP_TIME_ZONE, localDate, TICKET_PRICE } from '@/lib/domain.mjs';
 import { writeSearchState } from '@/lib/view-state.mjs';
@@ -46,6 +46,7 @@ export default function PendingPage() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState('');
   const paymentDialog = useRef(null);
   const paymentTitleId = useId();
 
@@ -73,7 +74,7 @@ export default function PendingPage() {
 
   // --- Payment Modal logic ---
   const openPaymentModal = useCallback(async (row, mode = 'pay') => {
-    setPaymentLoading(true); setPaymentError(''); setPaymentTarget(null);
+    setNotice(''); setPaymentLoading(true); setPaymentError(''); setPaymentTarget(null);
     setSelectedIds([]); setPaymentMethod('cash'); setConfirming(false); setSaving(false);
     try {
       const result = await requestJson('/api/pending/tickets?' + new URLSearchParams({ studentId: row.id }));
@@ -121,9 +122,11 @@ export default function PendingPage() {
         .filter(t => selectedIds.includes(t.id))
         .map(t => ({ id: t.id, updated_at: t.assignment_updated_at }));
       if (paymentTarget.mode === 'pay') {
-        await requestJson('/api/pending/tickets', jsonBody('PATCH', { studentId: paymentTarget.row.id, tickets, paymentMethod, expectedTotal: paymentSummary.total }));
+        const result = await requestJson('/api/pending/tickets', jsonBody('PATCH', { studentId: paymentTarget.row.id, tickets, paymentMethod, expectedTotal: paymentSummary.total }));
+        setNotice(`Pago registrado: ${paymentTarget.row.name} · ${result.changed} ${result.changed === 1 ? 'ticket' : 'tickets'} · ${money(result.total)} ${paymentMethod === 'cash' ? 'en efectivo' : 'con Yape'}.`);
       } else {
-        await requestJson('/api/pending/tickets', jsonBody('POST', { studentId: paymentTarget.row.id, tickets, noShow: paymentTarget.mode === 'no_show' }));
+        const result = await requestJson('/api/pending/tickets', jsonBody('POST', { studentId: paymentTarget.row.id, tickets, noShow: paymentTarget.mode === 'no_show' }));
+        setNotice(`${paymentTarget.row.name}: ${result.changed} ${result.changed === 1 ? 'ticket' : 'tickets'} ${paymentTarget.mode === 'no_show' ? 'marcados como No recogió' : 'vuelven a cobrarse'}.`);
       }
       setPaymentTarget(null);
       refresh();
@@ -140,9 +143,11 @@ export default function PendingPage() {
       <div><p className={styles.eyebrow}>ENTREGAS · PAGOS PENDIENTES</p><h1>Recogieron sin pagar</h1><p>Participantes que ya se llevaron su pollada y todavía tienen el pago pendiente.</p></div>
       <div className={styles.actions}>
         <button className="btn btn-secondary btn-sm" disabled={refreshing} onClick={refresh}><RefreshCw size={16} className={refreshing ? styles.spinning : undefined} />Actualizar</button>
+        <Link className="btn btn-secondary btn-sm" href="/pending/history"><History size={16} />Historial de pagos</Link>
         <button className="btn btn-primary btn-sm" disabled={!data?.rows.length || refreshing} onClick={exportReport}><Download size={16} />Exportar lista</button>
       </div>
     </header>
+    {notice && <div role="status" className={styles.success}><strong>{notice}</strong><span className={styles.actions}><Link href="/pending/history">Ver historial</Link><button type="button" className="btn btn-secondary btn-sm" onClick={() => setNotice('')}>Cerrar</button></span></div>}
     {error && <div role="alert" className={styles.error}><strong>{error}</strong>{data && <p>Se muestran los datos de la consulta anterior.</p>}<button className="btn btn-secondary btn-sm" onClick={refresh}>Reintentar</button></div>}
     {!data && !error && <div role="status" className={styles.loading}><HandCoins size={32} />Buscando pagos pendientes...</div>}
     {data && <div className={styles.content} aria-busy={refreshing}>

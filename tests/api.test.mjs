@@ -13,6 +13,7 @@ import * as assignmentHistory from '../lib/assignment-history.mjs';
 import * as delivery from '../lib/delivery.mjs';
 import * as analytics from '../lib/analytics.mjs';
 import * as pending from '../lib/pending.mjs';
+import * as paymentHistory from '../lib/payment-history.mjs';
 import { requireDeliveryEnabled, requireLegacyAdminEnabled } from '../lib/module-mode.mjs';
 
 const NextResponse = { json: (value, options) => Response.json(value, options) };
@@ -22,10 +23,10 @@ async function compile(path, dependencies, exports) {
 }
 async function handlers(route, client, { deliveryEnabled = true } = {}) {
   const api = await compile('../lib/api.js', { NextResponse, createClient: () => client, ValidationError: validation.ValidationError }, ['requireSession', 'apiError', 'HttpError']);
-  const methods = { analytics:['GET'], pending:['GET'], 'pending/tickets':['GET', 'PATCH', 'POST'], students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
-  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...batchPayments, ...assignmentHistory, ...delivery, ...analytics, ...pending, requireDeliveryEnabled: deliveryEnabled ? requireDeliveryEnabled : () => { throw new api.HttpError('Temporalmente inhabilitado',423); }, requireLegacyAdminEnabled, fetchAll, cashReport }, methods);
+  const methods = { analytics:['GET'], pending:['GET'], 'pending/tickets':['GET', 'PATCH', 'POST'], 'pending/payments':['GET'], students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] }[route];
+  return compile(`../app/api/${route}/route.js`, { NextResponse, ...api, ...validation, ...domain, ...csv, ...faculty, ...facultyExport, ...batchPayments, ...assignmentHistory, ...delivery, ...analytics, ...pending, ...paymentHistory, requireDeliveryEnabled: deliveryEnabled ? requireDeliveryEnabled : () => { throw new api.HttpError('Temporalmente inhabilitado',423); }, requireLegacyAdminEnabled, fetchAll, cashReport }, methods);
 }
-for (const [route, methods] of Object.entries({ analytics:['GET'], pending:['GET'], 'pending/tickets':['GET', 'PATCH', 'POST'], students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
+for (const [route, methods] of Object.entries({ analytics:['GET'], pending:['GET'], 'pending/tickets':['GET', 'PATCH', 'POST'], 'pending/payments':['GET'], students: ['GET', 'POST', 'DELETE'], tickets: ['GET', 'POST', 'PATCH'], stats: ['GET'], export: ['GET'], import: ['POST'], movements: ['GET'], faculty: ['GET','POST','PATCH','DELETE'], 'faculty/import': ['POST'], 'faculty/assignments': ['GET','POST'], 'faculty/tickets': ['GET','PATCH','DELETE'], 'faculty/payments': ['PATCH'], 'faculty/changes': ['GET'], 'faculty/export': ['GET'] })) {
   for (const method of methods) test(`${method} /api/${route} refuses unauthenticated access before reading data`, async () => {
     const client = { auth: { getUser: async () => ({ data: { user: null }, error: null }) }, from: () => assert.fail('Database must not be accessed') };
     const response = await (await handlers(route, client))[method]({ json: () => assert.fail('Body must not be read'), formData: () => assert.fail('File must not be read') });
@@ -294,4 +295,27 @@ test('Deudores sends each payment or No recogió as one all-or-nothing call and 
 test('Analytics rejects invalid dates before reading the snapshot and reports missing activation explicitly',async()=>{
  const route=await handlers('analytics',authenticated(()=>assert.fail('No query for invalid filters')));assert.equal((await route.GET({url:'http://localhost/api/analytics?from=2026-99-99'})).status,400);
  const missing=await handlers('analytics',authenticated(()=>({data:null,error:{code:'PGRST202'}})));assert.equal((await missing.GET({url:'http://localhost/api/analytics'})).status,503);
+});
+
+test('GET /api/pending/payments groups Deudores payments and validates dates', async () => {
+  const query = { calls: [], select(){return this;}, in(...a){this.calls.push(['in',...a]);return this;}, gte(...a){this.calls.push(['gte',...a]);return this;}, lt(...a){this.calls.push(['lt',...a]);return this;}, order(){return this;},
+    async range(start){ return { data: start ? [] : [
+      { id:'a', kind:'payment', amount:'15.00', method:'cash', created_at:'2026-11-26T15:00:01Z', actor_email:'caja@example.test', ticket_snapshot:{ origin:'pending', batch_id:'b1', ticket_number:11, student_name:'Ana', student_code:'A1' } },
+      { id:'b', kind:'payment', amount:'15.00', method:'cash', created_at:'2026-11-26T15:00:00Z', actor_email:'caja@example.test', ticket_snapshot:{ origin:'pending', batch_id:'b1', ticket_number:10, student_name:'Ana', student_code:'A1' } },
+      { id:'c', kind:'void', amount:'15.00', method:'yape', created_at:'2026-11-25T15:00:00Z', actor_email:'otro@example.test', ticket_snapshot:{ ticket_number:20, student_name:'Luis' } },
+    ], error: null }; } };
+  const client = { ...authenticated(() => assert.fail('No RPC')), from: table => { assert.equal(table, 'faculty_payments'); return query; } };
+  const route = await handlers('pending/payments', client);
+  const response = await route.GET({ url: 'http://localhost/api/pending/payments?from=2026-11-01&to=2026-11-26' });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(query.calls[0], ['in', 'method', ['cash', 'yape']]);
+  assert.equal(body.rows.length, 2);
+  assert.deepEqual(body.rows[0], { id:'b1', kind:'payment', origin:'pending', method:'cash', createdAt:'2026-11-26T15:00:01Z', actor:'caja@example.test', studentId:null, studentName:'Ana', studentCode:'A1', tickets:[10,11], amount:30 });
+  assert.equal(body.rows[1].amount, -15);
+  assert.deepEqual(body.summary, { operations:1, tickets:2, voids:1, cash:30, yape:-15, net:15 });
+  const onlyPending = await (await route.GET({ url: 'http://localhost/api/pending/payments?from=2026-11-01&to=2026-11-26&scope=pending' })).json();
+  assert.deepEqual(onlyPending.rows.map(row => row.id), ['b1']);
+  assert.equal((await route.GET({ url: 'http://localhost/api/pending/payments?from=2026-11-30&to=2026-11-01' })).status, 400);
+  assert.equal((await route.GET({ url: 'http://localhost/api/pending/payments?from=bad' })).status, 400);
 });

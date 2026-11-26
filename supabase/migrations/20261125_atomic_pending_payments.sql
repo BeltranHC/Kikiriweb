@@ -35,7 +35,7 @@ END $$;
 -- y se cobran en la misma transaccion. Si un ticket no se puede cobrar o el total no coincide, no se guarda nada.
 CREATE OR REPLACE FUNCTION public.pay_pending_tickets(p_student_id uuid,p_tickets jsonb,p_method text,p_expected_total numeric) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE v_ticket public.tickets;v_version timestamptz;v_total numeric(14,2):=0;v_result jsonb;v_results jsonb:='[]'::jsonb;v_voided integer:=0;
+DECLARE v_ticket public.tickets;v_version timestamptz;v_total numeric(14,2):=0;v_result jsonb;v_results jsonb:='[]'::jsonb;v_voided integer:=0;v_batch uuid:=gen_random_uuid();
 BEGIN
   PERFORM public.require_ticket_operator();
   IF p_method IS NULL OR p_method NOT IN('cash','yape') OR p_expected_total IS NULL OR p_expected_total<0 OR p_expected_total::text IN('NaN','Infinity','-Infinity') THEN
@@ -61,9 +61,12 @@ BEGIN
       v_version:=(v_result->'ticket'->>'assignment_updated_at')::timestamptz;v_voided:=v_voided+1;
     END IF;
     v_result:=public.set_faculty_ticket_payment(v_ticket.id,p_student_id,'pay',p_method,v_version);
+    -- Agrupa los pagos de este cobro para el historial de Deudores (no altera importe, medio ni fecha).
+    UPDATE public.faculty_payments SET ticket_snapshot=ticket_snapshot||jsonb_build_object('origin','pending','batch_id',v_batch)
+      WHERE id=(v_result->>'paymentEventId')::uuid;
     v_results:=v_results||jsonb_build_array(v_result->'ticket');
   END LOOP;
-  RETURN jsonb_build_object('studentId',p_student_id,'changed',jsonb_array_length(v_results),'prepaidVoided',v_voided,'total',v_total,'method',p_method,'tickets',v_results);
+  RETURN jsonb_build_object('studentId',p_student_id,'batchId',v_batch,'changed',jsonb_array_length(v_results),'prepaidVoided',v_voided,'total',v_total,'method',p_method,'tickets',v_results);
 END $$;
 
 -- Marca (true) o desmarca (false) "No recogio" para todos los tickets elegidos. Al marcar, un Prepagado se anula

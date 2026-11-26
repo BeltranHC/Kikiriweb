@@ -47,6 +47,8 @@ test('Deudores cobra y marca No recogió todo o nada, sin duplicar ni perder pag
       assert.equal(ledger.filter(row => row.kind === 'void' && row.method === 'prepaid' && row.a === 0).length, 3);
       assert.equal(ledger.filter(row => row.kind === 'payment' && row.method === 'cash' && row.a === 15).length, 4);
       assert.ok(ledger.every(row => row.actor_email === 'caja@example.test'));
+      const batch = await q("SELECT DISTINCT ticket_snapshot->>'origin' o,ticket_snapshot->>'batch_id' b FROM public.faculty_payments WHERE kind='payment' AND method='cash' AND ticket_id IN(SELECT id FROM public.tickets WHERE ticket_number BETWEEN 10 AND 13)");
+      assert.deepEqual(batch, [{ o: 'pending', b: result.batchId }]);
     });
 
     await run('Si un ticket no se puede cobrar, no se cobra ninguno', async () => {
